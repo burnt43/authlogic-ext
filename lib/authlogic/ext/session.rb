@@ -1,9 +1,9 @@
 module Authlogic
   module Ext
     module Session
-      #
+      # --------------------------------------------------
       # Include Hook
-      #
+      # --------------------------------------------------
 
       class << self
         def included(klass)
@@ -20,6 +20,7 @@ module Authlogic
           end
         end
 
+        # This is my own version of delegation that ActiveRecord uses.
         def define_ext_method_proxy(method_name, prefix: nil, on:)
           effective_prefix =
             if prefix == true
@@ -38,19 +39,23 @@ module Authlogic
         end
       end
 
+      # def set_two_factor_auth_completed
       define_ext_method_proxy :set_two_factor_auth_completed, prefix: true, on: :record
+      # def get_two_factor_auth_enabled
       define_ext_method_proxy :get_two_factor_auth_enabled,   prefix: true, on: :record
+      # def get_two_factor_auth_completed
       define_ext_method_proxy :get_two_factor_auth_completed, prefix: true, on: :record
+      
+      # --------------------------------------------------
+      # Callback Instance Methods
+      # --------------------------------------------------
 
-      #
-      # Instance Methods
-      #
-
-      # This is a 'before_destroy' callback. When destroying an Authlogic
-      # session, this will be called. When destroying a session(logging out),
-      # we need to unset the 'two_factor_auth_completed' flag.
-      def unset_two_factor_auth_completed_flag
-        record_set_two_factor_auth_completed(false)
+      # Check to see if the code entered matches what the current code is
+      # at this moment in time.
+      def two_factor_auth_code_valid?
+        unless two_factor_auth_code == record&.two_factor_auth_otp_code
+          errors.add(:two_factor_auth_code, 'does not match')
+        end
       end
 
       # Update an additional info here. This method is a 'before_save' callback.
@@ -62,20 +67,16 @@ module Authlogic
         end
       end
 
-      # We have set the two_factor_auth_code attr to something, therefore
-      # we consider this to mean that we want to validate that the input
-      # that was given matches what is generated with the OTP.
-      def two_factor_auth_code_provided?
-        !two_factor_auth_code.blank?
+      # This is a 'before_destroy' callback. When destroying an Authlogic
+      # session, this will be called. When destroying a session(logging out),
+      # we need to unset the 'two_factor_auth_completed' flag.
+      def unset_two_factor_auth_completed_flag
+        record_set_two_factor_auth_completed(false)
       end
 
-      # Check to see if the code entered matches what the current code is
-      # at this moment in time.
-      def two_factor_auth_code_valid?
-        unless two_factor_auth_code == record&.two_factor_auth_otp_code
-          errors.add(:two_factor_auth_code, 'does not match')
-        end
-      end
+      # --------------------------------------------------
+      # Callback Conditional Instance Methods
+      # --------------------------------------------------
 
       # Method that is a companion to the 'two_factor_auth_code_valid?'
       # validation method. This is called to even see if we should be 
@@ -83,6 +84,17 @@ module Authlogic
       def should_check_for_two_factor_auth_code_validity?
         two_factor_auth_enabled? && record_get_two_factor_auth_enabled
       end
+
+      # We have set the two_factor_auth_code attr to something, therefore
+      # we consider this to mean that we want to validate that the input
+      # that was given matches what is generated with the OTP.
+      def two_factor_auth_code_provided?
+        !two_factor_auth_code.blank?
+      end
+
+      # --------------------------------------------------
+      # Question Instance Methods
+      # --------------------------------------------------
 
       # Is 2FA enabled on the Authlogic Session via the 'two_factor_auth' config
       # option?
@@ -98,9 +110,9 @@ module Authlogic
         record_get_two_factor_auth_enabled && !record_get_two_factor_auth_completed
       end
 
-      #
+      # --------------------------------------------------
       # Class Methods
-      #
+      # --------------------------------------------------
 
       module ClassMethods
         # Return all the configured options as a hash.
@@ -114,7 +126,18 @@ module Authlogic
           @authlogic_ext_config[:two_factor_auth] = value
         end
 
-        def two_factor_auth_code_failure_allowance(value)
+        def ignore_two_factor_auth_redirection_on(controller_action_name)
+          @authlogic_ext_config ||= {}
+          (@authlogic_ext_config[:ignore_two_factor_auth_redirection_on] ||= []).push(controller_action_name)
+        end
+
+        def should_redirect_to_two_factor_auth_code_entry?
+          c = Authlogic::Session::Base.controller
+          current_controller_action_name = "#{c.controller_path}##{c.action_name}"
+
+          (authlogic_ext_config[:ignore_two_factor_auth_redirection_on] || []).none? do |controller_action_name|
+            current_controller_action_name == controller_action_name
+          end
         end
       end
     end

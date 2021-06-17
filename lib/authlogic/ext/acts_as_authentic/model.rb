@@ -2,9 +2,9 @@ module Authlogic
   module Ext
     module ActsAsAuthentic
       module Model
-        #
+        # --------------------------------------------------
         # Include Hook
-        #
+        # --------------------------------------------------
 
         class << self
           def included(klass)
@@ -19,9 +19,9 @@ module Authlogic
           end
         end
 
-        #
+        # --------------------------------------------------
         # Instance Methods
-        #
+        # --------------------------------------------------
 
         # Define getter/setters for attributes that can have whatever actual
         # columns names you want in your table.
@@ -62,45 +62,9 @@ module Authlogic
         # TODO: handle failures to enter code and then kill the session if too many
         # failures.
 
-        def set_two_factor_auth_completed_flag
-          set_two_factor_auth_completed(true)
-        end
-
-        def should_set_two_factor_auth_completed_flag?
-          acts_as_authentic_ext_config.act_like_two_factor_auth_completed_on_enable &&
-          two_factor_auth_has_changed_to_enabled?
-        end
-
-        def unset_two_factor_auth_completed_flag
-          set_two_factor_auth_completed(false)
-
-          # Return true otherwise this will mess up ActiveRecord's before_save
-          # callback system and abort the mission.
-          true
-        end
-
-        def should_unset_two_factor_auth_completed_flag?
-          two_factor_auth_has_changed_to_disabled?
-        end
-
-        # Get the instance the OTP class that will be used for generating
-        # codes.
-        def two_factor_auth_otp
-          return @two_factor_auth_otp if defined?(@two_factor_auth_otp)
-
-          if !get_two_factor_auth_key.blank? &&
-             acts_as_authentic_ext_config.two_factor_auth_otp_class
-          then
-            @two_factor_auth_otp = acts_as_authentic_ext_config.two_factor_auth_otp_class.new(get_two_factor_auth_key)
-          else
-            @two_factor_auth_otp = nil
-          end
-        end
-
-        # Return a generated code.
-        def two_factor_auth_otp_code
-          two_factor_auth_otp&.send(acts_as_authentic_ext_config.two_factor_auth_otp_code_method)
-        end
+        # --------------------------------------------------
+        # Callback Instance Methods
+        # --------------------------------------------------
 
         # Generate the key that will be used for Time-Based OTP.
         # Options:
@@ -117,6 +81,22 @@ module Authlogic
           end
         end
 
+        def set_two_factor_auth_completed_flag
+          set_two_factor_auth_completed(true)
+        end
+
+        def unset_two_factor_auth_completed_flag
+          set_two_factor_auth_completed(false)
+
+          # Return true otherwise this will mess up ActiveRecord's before_save
+          # callback system and abort the mission.
+          true
+        end
+
+        # --------------------------------------------------
+        # Callback Conditional Instance Methods
+        # --------------------------------------------------
+
         # See if the value of the two_factor_auth_enabled column has changed
         # from false to true.
         def two_factor_auth_has_changed_to_enabled?
@@ -125,20 +105,55 @@ module Authlogic
           get_two_factor_auth_enabled_changes == [false, true]
         end
 
+        def should_set_two_factor_auth_completed_flag?
+          acts_as_authentic_ext_config.act_like_two_factor_auth_completed_on_enable &&
+          two_factor_auth_has_changed_to_enabled?
+        end
+
+
+        def should_unset_two_factor_auth_completed_flag?
+          two_factor_auth_has_changed_to_disabled?
+        end
+
         def two_factor_auth_has_changed_to_disabled?
           return false unless acts_as_authentic_ext_config.two_factor_auth_required?
 
           get_two_factor_auth_enabled_changes == [true, false]
         end
 
+        # --------------------------------------------------
+        # 2FA Instance Methods
+        # --------------------------------------------------
+
+        # Get the instance the OTP class that will be used for generating
+        # codes.
+        def two_factor_auth_otp
+          return @two_factor_auth_otp if defined?(@two_factor_auth_otp)
+
+          if !get_two_factor_auth_key.blank? &&
+             acts_as_authentic_ext_config.two_factor_auth_otp_class
+          then
+            @two_factor_auth_otp = acts_as_authentic_ext_config.two_factor_auth_otp_class.new(get_two_factor_auth_key)
+          end
+        end
+
+        # Return a generated code.
+        def two_factor_auth_otp_code
+          two_factor_auth_otp&.send(acts_as_authentic_ext_config.two_factor_auth_otp_code_method)
+        end
+
+        # --------------------------------------------------
+        # Config Methods
+        # --------------------------------------------------
+
         # Access the config that was created for the class of this object.
         def acts_as_authentic_ext_config
           self.class.acts_as_authentic_ext_config
         end
 
-        #
+        # --------------------------------------------------
         # Class Methods
-        #
+        # --------------------------------------------------
 
         module ClassMethods
           # This is my version of 'acts_as_authentic'. I tried to make it
