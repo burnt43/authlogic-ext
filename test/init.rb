@@ -3,8 +3,10 @@ module Warning
   end
 end
 
-require 'minitest/pride'
-require 'minitest/autorun'
+unless $SKIP_MINITEST
+  require 'minitest/pride'
+  require 'minitest/autorun'
+end
 
 require 'authlogic'
 require 'rotp'
@@ -14,11 +16,31 @@ module Authlogic
   module Ext
     module Testing
       class << self
-        def generate_acts_as_authentic_class(name)
+        def database_file
+          @database_file ||= Pathname.new('test/assets/db/test.sqlite3')
+        end
+
+        def ensure_database_file_exists!
+          return if database_file.exist?
+
+          FileUtils.touch(database_file)
+        end
+
+        def destroy_database_file!
+          return unless database_file.exist?
+
+          FileUtils.rm(database_file)
+        end
+
+        def load_schema_into_database_file!
+        end
+
+        def generate_acts_as_authentic_class(name, &block)
           Class.new(ActiveRecord::Base).tap do |c|
             c.class_eval do
-              # We need to hack the name method for this class. Normally, we
-              # could just do:
+              # We need to hack the name method for this class. Since this is
+              # an 'anonymous class' it won't have a name. Authlogic relies
+              # on the class having a name. Normally, we could just do:
               # def self.name
               #   'some_name'
               # end
@@ -37,10 +59,12 @@ module Authlogic
               # Include the Ext functionality.
               include Authlogic::Ext::ActsAsAuthentic::Model
             end
+
+            c.class_eval(&block) if block
           end
         end
 
-        def generate_session_class(name, acts_as_authentic_class: nil)
+        def generate_session_class(name, acts_as_authentic_class: nil, &block)
           Class.new(Authlogic::Session::Base).tap do |c|
             c.class_eval do
               # See 'generate_acts_as_authentic_class' for explanation.
@@ -57,6 +81,8 @@ module Authlogic
               # Include the Ext functionality.
               include Authlogic::Ext::Session
             end
+
+            c.class_eval(&block) if block
           end
         end
       end
@@ -64,8 +90,20 @@ module Authlogic
       class DummyController
       end
 
-      class Test < Minitest::Test
+      unless $SKIP_MINITEST
+        class Test < Minitest::Test
+        end
       end
     end
   end
 end
+
+ActiveRecord::Base.configurations = {
+  test: {
+    adapter: 'sqlite3',
+    pool:     5,
+    timeout:  5000,
+    database: Authlogic::Ext::Testing.database_file.to_s
+  }
+}
+ActiveRecord::Base.establish_connection(:test)

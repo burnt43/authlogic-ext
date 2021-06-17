@@ -33,6 +33,7 @@ GEM
     scrypt (1.2.1)
       ffi-compiler (>= 0.0.2)
       rake
+    sqlite3 (1.4.2)
     tzinfo (2.0.4)
       concurrent-ruby (~> 1.0)
     zeitwerk (2.4.2)
@@ -44,6 +45,7 @@ DEPENDENCIES
   authlogic (= 3.4.4)
   minitest
   rotp
+  sqlite3
 
 BUNDLED WITH
    2.0.2
