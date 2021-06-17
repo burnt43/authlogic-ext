@@ -197,6 +197,18 @@ module Authlogic
 
       unless $SKIP_MINITEST
         class Test < Minitest::Test
+          def setup
+            Authlogic::Session::Base.controller = Authlogic::Ext::Testing::DummyController.new
+          end
+
+          def teardown
+            current_controller = Authlogic::Session::Base.controller
+            if current_controller.respond_to?(:clear_cached_data!)
+              current_controller.clear_cached_data!
+            end
+
+            Authlogic::Ext::Testing.clear_tables!
+          end
         end
       end
     end

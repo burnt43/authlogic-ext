@@ -5,8 +5,6 @@ module Authlogic
     module Testing
       class ActsAsAuthenticModelTest < Authlogic::Ext::Testing::Test
         def test_basic_2fa_setup
-          Authlogic::Session::Base.controller = Authlogic::Ext::Testing::DummyController.new
-
           # --------------------------------------------------
           # Create a basic user with a username and password. Leave 2FA
           # disabled on this user.
