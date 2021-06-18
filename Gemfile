@@ -7,5 +7,6 @@ group(:test) do
   gem 'authlogic', '=3.4.4'
   gem 'minitest', '=5.14.4'
   gem 'rotp', '=6.2.0'
+  gem 'rqrcode'
   gem 'sqlite3', '=1.3.13'
 end

@@ -17,6 +17,9 @@ module Authlogic
               config.two_factor_auth = true
               config.two_factor_auth_otp_class = ROTP::TOTP
               config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
               config.act_like_two_factor_auth_completed_on_enable = true
             end
           end
@@ -49,6 +52,9 @@ module Authlogic
           # 2FA methods should not return anything.
           assert_nil(user.two_factor_auth_otp)
           assert_nil(user.two_factor_auth_otp_code)
+          assert_nil(user.two_factor_auth_otp_uri)
+          assert_nil(user.two_factor_auth_qr_code)
+          assert_nil(user.two_factor_auth_qr_code_svg)
 
           # --------------------------------------------------
           # Login (With 2FA disabled and wrong password)
@@ -96,6 +102,9 @@ module Authlogic
             # 2FA methods should not return anything.
             assert_nil(record.two_factor_auth_otp)
             assert_nil(record.two_factor_auth_otp_code)
+            assert_nil(record.two_factor_auth_otp_uri)
+            assert_nil(record.two_factor_auth_qr_code)
+            assert_nil(record.two_factor_auth_qr_code_svg)
           end
 
           # --------------------------------------------------
@@ -115,6 +124,9 @@ module Authlogic
             # The OTP methods should now give some data.
             refute_nil(record.two_factor_auth_otp)
             refute_nil(record.two_factor_auth_otp_code)
+            refute_nil(record.two_factor_auth_otp_uri)
+            refute_nil(record.two_factor_auth_qr_code)
+            refute_nil(record.two_factor_auth_qr_code_svg)
           end
 
           # --------------------------------------------------

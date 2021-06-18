@@ -15,6 +15,8 @@ end
 require 'authlogic'
 require './lib/authlogic-ext'
 require 'rotp'
+require 'rqrcode'
+require 'stringio'
 
 module Authlogic
   module Ext

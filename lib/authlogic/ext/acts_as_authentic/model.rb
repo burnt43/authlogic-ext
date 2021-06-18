@@ -141,6 +141,45 @@ module Authlogic
           two_factor_auth_otp&.send(acts_as_authentic_ext_config.two_factor_auth_otp_code_method)
         end
 
+        def two_factor_auth_otp_uri
+          return unless two_factor_auth_otp &&
+                        acts_as_authentic_ext_config.two_factor_auth_uri_method &&
+                        two_factor_auth_otp.respond_to?(acts_as_authentic_ext_config.two_factor_auth_uri_method) &&
+                        acts_as_authentic_ext_config.two_factor_auth_uri_input_method
+
+          two_factor_auth_otp.send(
+            acts_as_authentic_ext_config.two_factor_auth_uri_method,
+            send(acts_as_authentic_ext_config.two_factor_auth_uri_input_method)
+          )
+        end
+
+        def two_factor_auth_qr_code
+          uri = two_factor_auth_otp_uri
+          return unless uri && acts_as_authentic_ext_config.two_factor_auth_uri_qr_code_class
+
+          acts_as_authentic_ext_config.two_factor_auth_uri_qr_code_class.new(uri)
+        end
+
+        def two_factor_auth_qr_code_svg(width: 500, height: 500, module_size: 8)
+          qr_code = two_factor_auth_qr_code
+          return unless qr_code
+
+          StringIO.new.tap do |s|
+            s.print(%Q(<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:ev="http://www.w3.org/2001/xml-events" width="#{width}" height="#{height}" shape-rendering="crispEdges">))
+            s.print(
+              qr_code.as_svg({
+                color: '000',
+                shape_rendering: 'crispEdges',
+                standalone: false,
+                use_path: true
+              }.merge({
+                module_size: module_size
+              }))
+            )
+            s.print("</svg>")
+          end.string
+        end
+
         # --------------------------------------------------
         # Config Methods
         # --------------------------------------------------

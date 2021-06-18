@@ -28,6 +28,9 @@ module Authlogic
         define_option :two_factor_auth_last_successful_auth_attr_name, :two_factor_auth_last_successful_auth
         define_option :two_factor_auth_otp_class
         define_option :two_factor_auth_otp_code_method
+        define_option :two_factor_auth_uri_method
+        define_option :two_factor_auth_uri_input_method
+        define_option :two_factor_auth_uri_qr_code_class
         define_option :act_like_two_factor_auth_completed_on_enable, true
       end
     end
