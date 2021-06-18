@@ -18,6 +18,22 @@ require 'rotp'
 
 module Authlogic
   module Ext
+    # Add a class method to Session classes that we can use in the tests to
+    # simulate like you just made a controller request and this is the
+    # session and record you would find in the before_filters.
+    module Session
+      module ClassMethods
+        # Pretend like we're making a web request and yield to the given block
+        # the session and record we've found.
+        def within_request(&block)
+          if block
+            session = find
+            block.call(session, session&.record)
+          end
+        end
+      end
+    end
+
     module Testing
       class << self
         def database_file
@@ -82,13 +98,14 @@ module Authlogic
           ActiveRecord::Base.connection.execute('DELETE FROM web_users WHERE 1;')
         end
 
-=begin
-        NOTE: These anonymous class generators are no longer used, but I'm
-          keeping them because they are cool and I may need to look back
-          at them in the future.
+        # NOTE: These anonymous class generators are no longer used, but I'm
+        #   keeping them because they are cool and I may need to look back
+        #   at them in the future.
 
         def generate_acts_as_authentic_class(name, &block)
           Class.new(ActiveRecord::Base).tap do |c|
+            c.table_name = 'web_users'
+
             c.class_eval do
               # We need to hack the name method for this class. Since this is
               # an 'anonymous class' it won't have a name. Authlogic relies
@@ -145,10 +162,17 @@ module Authlogic
             c.class_eval(&block) if block
           end
         end
-=end
       end
 
       class DummyController
+        attr_accessor :controller_path
+        attr_accessor :action_name
+
+        def initialize(controller_path: nil, action_name: nil)
+          @controller_path = controller_path
+          @action_name = action_name
+        end
+
         def clear_cached_data!
           @cookies = nil
           @params = nil
@@ -224,63 +248,3 @@ ActiveRecord::Base.configurations = {
   }
 }
 ActiveRecord::Base.establish_connection(:test)
-
-module Authlogic
-  module Ext
-    module Session
-      module ClassMethods
-        # Pretend like we're making a web request and yield to the given block
-        # the session and record we've found.
-        def within_request(&block)
-          if block
-            session = find
-            block.call(session, session&.record)
-          end
-        end
-      end
-    end
-  end
-end
-
-# Define Models
-module Authlogic
-  module Ext
-    module Testing
-      module Models
-        module TwoFactorAuthEnabled
-          class WebUser < ActiveRecord::Base
-            include Authlogic::Ext::ActsAsAuthentic::Model
-
-            self.table_name = 'web_users'
-
-            acts_as_authentic do |config|
-              config.perishable_token_valid_for = 3600
-              config.validate_email_field = false
-              config.crypto_provider = Authlogic::CryptoProviders::Sha512
-              config.merge_validates_length_of_password_field_options(minimum: 8)
-            end
-
-            acts_as_authentic_ext do |config|
-              config.two_factor_auth = true
-              config.two_factor_auth_otp_class = ROTP::TOTP
-              config.two_factor_auth_otp_code_method = :now
-              config.act_like_two_factor_auth_completed_on_enable = true
-            end
-
-            class Session < Authlogic::Session::Base
-              include Authlogic::Ext::Session
-
-              generalize_credentials_error_messages true
-              allow_http_basic_auth false
-              find_by_login_method :find_by_username
-              login_field :username
-              two_factor_auth true
-              ignore_two_factor_auth_redirection_on "namespace1/namespace2/foos#action1"
-              ignore_two_factor_auth_redirection_on "bars#action2"
-            end
-          end
-        end
-      end
-    end
-  end
-end

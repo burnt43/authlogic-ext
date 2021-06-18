@@ -5,11 +5,37 @@ module Authlogic
     module Testing
       class ActsAsAuthenticModelTest < Authlogic::Ext::Testing::Test
         def test_basic_2fa_setup
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic do |config|
+              config.perishable_token_valid_for = 3600
+              config.validate_email_field = false
+              config.crypto_provider = Authlogic::CryptoProviders::Sha512
+              config.merge_validates_length_of_password_field_options(minimum: 8)
+            end
+
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.act_like_two_factor_auth_completed_on_enable = true
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            generalize_credentials_error_messages true
+            allow_http_basic_auth false
+            find_by_login_method :find_by_username
+            login_field :username
+            two_factor_auth true
+            ignore_two_factor_auth_redirection_on "namespace1/namespace2/foos#action1"
+            ignore_two_factor_auth_redirection_on "bars#action2"
+          end
+
           # --------------------------------------------------
           # Create a basic user with a username and password. Leave 2FA
           # disabled on this user.
           # --------------------------------------------------
-          user = Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser.new(
+          user = user_class.new(
             username: 'user01',
             password: 'my*pass*word',
             password_confirmation: 'my*pass*word'
@@ -28,10 +54,10 @@ module Authlogic
           # --------------------------------------------------
           # Login (With 2FA disabled)
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             assert_nil(session)
 
-            new_session = Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.new(
+            new_session = session_class.new(
               username: 'user01',
               password: 'my*pass*word'
             )
@@ -42,7 +68,7 @@ module Authlogic
           # --------------------------------------------------
           # We're logged in so find the session!
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             refute_nil(session)
 
             # This method should be false since the record doesn't even have
@@ -62,7 +88,7 @@ module Authlogic
           # --------------------------------------------------
           # Enable 2FA on the user
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             update_result = record.update_attributes(two_factor_auth_enabled: true)
             assert(update_result)
 
@@ -81,7 +107,7 @@ module Authlogic
           # --------------------------------------------------
           # Logout the User
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             # Logout by destroying the session.
             session.destroy
 
@@ -93,10 +119,10 @@ module Authlogic
           # --------------------------------------------------
           # Login (With 2FA enabled)
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             assert_nil(session)
 
-            new_session = Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.new(
+            new_session = session_class.new(
               username: 'user01',
               password: 'my*pass*word'
             )
@@ -108,7 +134,7 @@ module Authlogic
           # After logging in, the session should recognize we
           # need to enter a 2FA code
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             # The session should be in a state where it is expecting to receive
             # a 2FA code to complete authentication.
             assert(session.record_has_two_factor_auth_required_and_uncompleted?)
@@ -117,7 +143,7 @@ module Authlogic
           # --------------------------------------------------
           # Simulate user entering a 2FA code (Incorrect Code)
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             session.two_factor_auth_code = 'xxxyyy'
             save_result = session.save
             refute(save_result)
@@ -127,7 +153,7 @@ module Authlogic
           # --------------------------------------------------
           # Simulate user entering a 2FA code (Correct Code)
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             session.two_factor_auth_code = record.two_factor_auth_otp_code
             save_result = session.save
             assert(save_result)
@@ -137,14 +163,14 @@ module Authlogic
           # We should now be fully authenticated with both
           # username/password and the 2FA code.
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             refute(session.record_has_two_factor_auth_required_and_uncompleted?)
           end
 
           # --------------------------------------------------
           # Logout
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             session.destroy
             refute(record.two_factor_auth_completed?)
           end
@@ -152,7 +178,7 @@ module Authlogic
           # --------------------------------------------------
           # Session is gone
           # --------------------------------------------------
-          Authlogic::Ext::Testing::Models::TwoFactorAuthEnabled::WebUser::Session.within_request do |session, record|
+          session_class.within_request do |session, record|
             assert_nil(session)
           end
         end
