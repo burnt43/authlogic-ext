@@ -10,8 +10,8 @@ end
 
 pathname = Pathname.new(__FILE__)
 
-require pathname.parent.join('authlogic', 'ext')
-require pathname.parent.join('authlogic', 'ext', 'session')
-require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic')
-require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic', 'configuration')
-require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic', 'model')
+require pathname.parent.join('authlogic', 'ext').to_s
+require pathname.parent.join('authlogic', 'ext', 'session').to_s
+require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic').to_s
+require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic', 'configuration').to_s
+require pathname.parent.join('authlogic', 'ext', 'acts_as_authentic', 'model').to_s
