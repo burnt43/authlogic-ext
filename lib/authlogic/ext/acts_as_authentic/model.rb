@@ -29,6 +29,8 @@ module Authlogic
           two_factor_auth_key
           two_factor_auth_enabled
           two_factor_auth_completed
+          two_factor_auth_failure_count
+          two_factor_auth_last_successful_auth
         ].each do |virtual_attr_name|
           config_attr_name_method = "#{virtual_attr_name}_attr_name"
 
@@ -58,9 +60,6 @@ module Authlogic
             send("#{actual_attr_name}_change")
           end
         end
-
-        # TODO: handle failures to enter code and then kill the session if too many
-        # failures.
 
         # --------------------------------------------------
         # Callback Instance Methods

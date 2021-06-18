@@ -27,8 +27,7 @@ module Authlogic
             find_by_login_method :find_by_username
             login_field :username
             two_factor_auth true
-            ignore_two_factor_auth_redirection_on "namespace1/namespace2/foos#action1"
-            ignore_two_factor_auth_redirection_on "bars#action2"
+            two_factor_auth_threshold 1
           end
 
           # --------------------------------------------------
@@ -52,7 +51,21 @@ module Authlogic
           assert_nil(user.two_factor_auth_otp_code)
 
           # --------------------------------------------------
-          # Login (With 2FA disabled)
+          # Login (With 2FA disabled and wrong password)
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'not_the_password'
+            )
+            save_result = new_session.save
+            refute(save_result)
+          end
+
+          # --------------------------------------------------
+          # Login (With 2FA disabled and the right password)
           # --------------------------------------------------
           session_class.within_request do |session, record|
             assert_nil(session)
@@ -138,6 +151,8 @@ module Authlogic
             # The session should be in a state where it is expecting to receive
             # a 2FA code to complete authentication.
             assert(session.record_has_two_factor_auth_required_and_uncompleted?)
+            assert_equal(0, record.two_factor_auth_failure_count)
+            assert_nil(record.two_factor_auth_last_successful_auth)
           end
 
           # --------------------------------------------------
@@ -148,6 +163,25 @@ module Authlogic
             save_result = session.save
             refute(save_result)
             assert(session.errors.messages.key?(:two_factor_auth_code))
+            assert_equal(1, record.two_factor_auth_failure_count)
+            assert_nil(record.two_factor_auth_last_successful_auth)
+          end
+
+          # --------------------------------------------------
+          # Login again because we failed to enter a code and
+          # reached the configured threshold of 1. This means
+          # the session gets killed and the user has to log
+          # in again from the start.
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'my*pass*word'
+            )
+            save_result = new_session.save
+            assert(save_result)
           end
 
           # --------------------------------------------------
@@ -157,6 +191,8 @@ module Authlogic
             session.two_factor_auth_code = record.two_factor_auth_otp_code
             save_result = session.save
             assert(save_result)
+            assert_equal(0, record.two_factor_auth_failure_count)
+            refute_nil(record.two_factor_auth_last_successful_auth)
           end
 
           # --------------------------------------------------

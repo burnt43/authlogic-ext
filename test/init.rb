@@ -53,7 +53,7 @@ module Authlogic
         end
 
         def load_schema_into_database_file!
-					schema_load = Class.new(ActiveRecord::Migration[4.2]) do
+					schema_load = Class.new(ActiveRecord::Migration) do
 						def up
 							create_table :web_users do |t|
 								# My Columns
@@ -83,10 +83,13 @@ module Authlogic
 								t.string :current_login_ip
 								t.string :last_login_ip
 
-								# Authlogic::Ext
+								# Authlogic::Ext (Necessary Columns)
 								t.string :two_factor_auth_key, limit: 32
 								t.boolean :two_factor_auth_enabled, null: false, default: false
 								t.boolean :two_factor_auth_completed, null: false, default: false
+                # Authlogic::Ext (Optional Columns)
+                t.integer :two_factor_auth_failure_count, null: false, default: 0
+                t.datetime :two_factor_auth_last_successful_auth
 							end
 						end
 					end
