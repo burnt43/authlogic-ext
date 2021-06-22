@@ -24,8 +24,8 @@ module Authlogic
             allow_http_basic_auth false
             find_by_login_method :find_by_username
             login_field :username
+
             two_factor_auth true
-            two_factor_auth_threshold 1
             ignore_two_factor_auth_redirection_on "namespace1/namespace2/foos#action1"
             ignore_two_factor_auth_redirection_on "bars#action2"
           end

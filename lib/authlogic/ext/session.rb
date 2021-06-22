@@ -22,6 +22,14 @@ module Authlogic
           end
         end
       end
+
+      # --------------------------------------------------
+      # Instance Methods
+      # --------------------------------------------------
+
+      def reset_two_factor_auth_failure_count
+        record.set_two_factor_auth_failure_count(0)
+      end
       
       # --------------------------------------------------
       # Callback Instance Methods
@@ -49,6 +57,8 @@ module Authlogic
         threshold = self.class.authlogic_ext_config[:two_factor_auth_threshold]
         return unless threshold && attempted_record && attempted_record.get_two_factor_auth_failure_count >= threshold
 
+        reset_two_factor_auth_failure_count
+
 				# NOTE: This callback will be called in the validation phase and this will
 				#   only execute on a validation failure. I would like to destroy this
         #   very session, but its still in the validation phase so if I call
@@ -73,7 +83,7 @@ module Authlogic
           record.set_two_factor_auth_completed(true)
 
           # Reset the failure count.
-          record.set_two_factor_auth_failure_count(0)
+          reset_two_factor_auth_failure_count
 
           # Set last_successful_auth to right now!
           record.set_two_factor_auth_last_successful_auth(Time.now)

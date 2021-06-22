@@ -30,7 +30,7 @@ module Authlogic
             find_by_login_method :find_by_username
             login_field :username
             two_factor_auth true
-            two_factor_auth_threshold 1
+            two_factor_auth_threshold 2
           end
 
           # --------------------------------------------------
@@ -168,7 +168,8 @@ module Authlogic
           end
 
           # --------------------------------------------------
-          # Simulate user entering a 2FA code (Incorrect Code)
+          # Simulate user entering a 2FA code
+          # (Incorrect Code 1st Time)
           # --------------------------------------------------
           session_class.within_request do |session, record|
             session.two_factor_auth_code = 'xxxyyy'
@@ -176,6 +177,22 @@ module Authlogic
             refute(save_result)
             assert(session.errors.messages.key?(:two_factor_auth_code))
             assert_equal(1, record.two_factor_auth_failure_count)
+            assert_nil(record.two_factor_auth_last_successful_auth)
+          end
+
+          # --------------------------------------------------
+          # Simulate user entering a 2FA code
+          # (Incorrect Code 2nd time in a row) 
+          # This should put us at the configured max of 2
+          # which will destroy the session and reset the
+          # failure count back to 0.
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            session.two_factor_auth_code = 'xxxyyy'
+            save_result = session.save
+            refute(save_result)
+            assert(session.errors.messages.key?(:two_factor_auth_code))
+            assert_equal(0, record.two_factor_auth_failure_count)
             assert_nil(record.two_factor_auth_last_successful_auth)
           end
 

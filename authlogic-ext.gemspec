@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'authlogic-ext'
-  s.version     = '1.1.2'
+  s.version     = '1.1.3'
   s.summary     = ''
   s.description = ''
   s.authors     = ['James Carson']
