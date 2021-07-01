@@ -16,9 +16,15 @@ module Authlogic
             validate :increment_two_factor_auth_failure_count
             validate :two_factor_auth_failure_threshold_reached
 
+            after_persisting :check_two_factor_auth_persistence_token
+
             before_save :update_ext_info
 
+            after_save :save_two_factor_auth_cookie, if: :should_call_save_two_factor_auth_cookie_callback?
+
             before_destroy :unset_two_factor_auth_completed_flag
+
+            after_destroy :destroy_two_factor_auth_cookie
           end
         end
       end
@@ -30,7 +36,80 @@ module Authlogic
       def reset_two_factor_auth_failure_count
         record.set_two_factor_auth_failure_count(0)
       end
-      
+
+      def reset_two_factor_auth_persistence_token
+        record.set_two_factor_auth_persistence_token(Authlogic::Random.hex_token)
+      end
+
+      def should_reset_two_factor_auth_persistence_token?
+        return false unless record
+
+        record.get_two_factor_auth_persistence_token.nil?
+      end
+
+      def set_two_factor_auth_completed_flag
+        @two_factor_auth_completed = true
+      end
+
+      def unset_two_factor_auth_completed_flag
+        @two_factor_auth_completed = false
+      end
+
+      def two_factor_auth_completed?
+        @two_factor_auth_completed
+      end
+
+      # --------------------------------------------------
+      # 2FA Cookie Methods
+      # --------------------------------------------------
+
+      # REVIEW: This might be better as a configurable option, instead of
+      #   hard-coded.
+      def two_factor_auth_cookie_key
+        'two_factor_auth_credentials'
+      end
+
+      def generate_two_factor_auth_cookie_for_saving
+        {
+          value:    "#{record.get_two_factor_auth_persistence_token}",
+          expires:  nil,
+          secure:   secure,
+          httponly: httponly,
+          domain:   controller.cookie_domain
+        }
+      end
+
+      def save_two_factor_auth_cookie
+        if sign_cookie?
+          controller.cookies.signed[two_factor_auth_cookie_key] = generate_two_factor_auth_cookie_for_saving
+        else
+          controller.cookies[two_factor_auth_cookie_key] = generate_two_factor_auth_cookie_for_saving
+        end
+      end
+
+      def two_factor_auth_cookie_credentials
+        if self.class.sign_cookie
+          cookie = controller.cookies.signed[two_factor_auth_cookie_key]
+        else
+          cookie = controller.cookies[two_factor_auth_cookie_key]
+        end
+
+        return {} unless cookie
+
+        data = cookie.split('::')
+        {
+          two_factor_auth_persistence_token: data[0]
+        }
+      end
+
+      def should_call_save_two_factor_auth_cookie_callback?
+        two_factor_auth_code_provided?
+      end
+
+      def destroy_two_factor_auth_cookie
+        controller.cookies.delete two_factor_auth_cookie_key, :domain => controller.cookie_domain
+      end
+
       # --------------------------------------------------
       # Callback Instance Methods
       # --------------------------------------------------
@@ -73,14 +152,37 @@ module Authlogic
 				after_destroy
       end
 
+      def check_two_factor_auth_persistence_token
+        if record
+          two_factor_auth_persistence_token_from_cookie = two_factor_auth_cookie_credentials[:two_factor_auth_persistence_token]
+
+          if !record.get_two_factor_auth_persistence_token.blank? &&
+             record.get_two_factor_auth_persistence_token == two_factor_auth_persistence_token_from_cookie
+          then
+            set_two_factor_auth_completed_flag
+          else
+            unset_two_factor_auth_completed_flag
+          end
+        else
+          unset_two_factor_auth_completed_flag
+        end
+      end
+
       # Update an additional info here. This method is a 'before_save' callback.
       # This will happen if a login is successful or a 2FA code entry is
       # successful.
       def update_ext_info
+        # If a 2FA code was provided and a record exists, then we consider
+        # this to mean that the Session object was saved successfully with
+        # a 2FA code.
         if two_factor_auth_code_provided? && record
           # Set 2FA flag to complete. The user has successfully authenticated
           # with both their password and their 2FA code.
           record.set_two_factor_auth_completed(true)
+
+          if should_reset_two_factor_auth_persistence_token?
+            reset_two_factor_auth_persistence_token
+          end
 
           # Reset the failure count.
           reset_two_factor_auth_failure_count
@@ -93,6 +195,7 @@ module Authlogic
       # This is a 'before_destroy' callback. When destroying an Authlogic
       # session, this will be called. When destroying a session(logging out),
       # we need to unset the 'two_factor_auth_completed' flag.
+      # TODO: remove this
       def unset_two_factor_auth_completed_flag
         return unless record
 
@@ -132,7 +235,7 @@ module Authlogic
       # entry successfully? This basically means the user logged in OK
       # with a username/password, but did not enter a good 2FA code yet.
       def record_has_two_factor_auth_required_and_uncompleted?
-        record&.get_two_factor_auth_enabled && !record&.get_two_factor_auth_completed
+        record&.get_two_factor_auth_enabled && !two_factor_auth_completed?
       end
 
       # --------------------------------------------------

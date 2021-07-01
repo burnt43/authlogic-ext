@@ -25,9 +25,11 @@ module Authlogic
 
         # Define getter/setters for attributes that can have whatever actual
         # columns names you want in your table.
+        # TODO: remove two_factor_auth_completed
         %i[
           two_factor_auth_key
           two_factor_auth_enabled
+          two_factor_auth_persistence_token
           two_factor_auth_completed
           two_factor_auth_failure_count
           two_factor_auth_last_successful_auth

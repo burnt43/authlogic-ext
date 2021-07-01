@@ -18,6 +18,12 @@ require 'rotp'
 require 'rqrcode'
 require 'stringio'
 
+module Kernel
+  def jcarson_debug(msg)
+    puts "[\033[0;34mJCARSON\033[0;0m] - #{msg}"
+  end
+end
+
 module Authlogic
   module Ext
     # Add a class method to Session classes that we can use in the tests to
@@ -88,7 +94,12 @@ module Authlogic
 								# Authlogic::Ext (Necessary Columns)
 								t.string :two_factor_auth_key, limit: 32
 								t.boolean :two_factor_auth_enabled, null: false, default: false
+								t.string :two_factor_auth_persistence_token
+								t.index :two_factor_auth_persistence_token, unique: true
+
+                # TODO: This should be removed
 								t.boolean :two_factor_auth_completed, null: false, default: false
+
                 # Authlogic::Ext (Optional Columns)
                 t.integer :two_factor_auth_failure_count, null: false, default: 0
                 t.datetime :two_factor_auth_last_successful_auth
