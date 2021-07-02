@@ -13,10 +13,11 @@ module Authlogic
             attr_accessor :two_factor_auth_code
 
             validate :two_factor_auth_code_valid?, if: :should_check_for_two_factor_auth_code_validity?
-            validate :increment_two_factor_auth_failure_count
-            validate :two_factor_auth_failure_threshold_reached
 
-            after_persisting :check_two_factor_auth_persistence_token
+            after_persisting :check_two_factor_auth_persistence_token, if: :should_check_two_factor_auth_persistence_token?
+
+            after_two_factor_auth_failed :increment_two_factor_auth_failure_count
+            after_two_factor_auth_failed :check_two_factor_auth_failure_threshold_reached
 
             after_two_factor_auth_succeeded :reset_two_factor_auth_persistence_token, if: :should_reset_two_factor_auth_persistence_token?
             after_two_factor_auth_succeeded :reset_two_factor_auth_failure_count
@@ -148,20 +149,19 @@ module Authlogic
       def two_factor_auth_code_valid?
         unless two_factor_auth_code == record&.two_factor_auth_otp_code
           errors.add(:two_factor_auth_code, 'does not match')
+          run_authlogc_ext_callbacks(:after, :two_factor_auth_failed)
         end
       end
 
       def increment_two_factor_auth_failure_count
-        if errors.key?(:two_factor_auth_code) && attempted_record
-          old_count = attempted_record.get_two_factor_auth_failure_count
-          return unless old_count
+        old_count = attempted_record.get_two_factor_auth_failure_count
+        return unless old_count
 
-          new_count = old_count + 1
-          attempted_record.set_two_factor_auth_failure_count(new_count)
-        end
+        new_count = old_count + 1
+        attempted_record.set_two_factor_auth_failure_count(new_count)
       end
 
-      def two_factor_auth_failure_threshold_reached
+      def check_two_factor_auth_failure_threshold_reached
         threshold = self.class.authlogic_ext_config[:two_factor_auth_threshold]
         return unless threshold && attempted_record && attempted_record.get_two_factor_auth_failure_count >= threshold
 
@@ -181,6 +181,18 @@ module Authlogic
 				after_destroy
       end
 
+      # This is an 'after_persisting' callback. 'after_persisting' is a special
+      # callback defined in the real Authlogic library. It basically means that
+      # we've found a Session using some means of persistence. From MTT's
+      # perspective, this means that we've found the session using the
+      # persistence token in the cookies. In our design, we also have a
+      # persistence token that represents that 2FA was completed. In this method
+      # we are checking the existence of the 2FA persistence token and whether
+      # or not it matches what the record has in the database. If it does match,
+      # then we set a flag saying that this Session must have completed 2FA at
+      # some point, if it does not match, then we make sure the flag is unset.
+      # This means that the Session is still expecting a 2FA code to complete
+      # authentication.
       def check_two_factor_auth_persistence_token
         if record
           two_factor_auth_persistence_token_from_cookie = two_factor_auth_cookie_credentials[:two_factor_auth_persistence_token]
@@ -195,6 +207,10 @@ module Authlogic
         else
           unset_two_factor_auth_completed_flag
         end
+      end
+
+      def should_check_two_factor_auth_persistence_token?
+        two_factor_auth_enabled?
       end
 
       # --------------------------------------------------
