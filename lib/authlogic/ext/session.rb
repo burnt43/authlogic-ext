@@ -29,6 +29,10 @@ module Authlogic
             after_two_factor_auth_succeeded :update_two_factor_auth_last_successful_auth
             after_two_factor_auth_succeeded :set_two_factor_auth_confirmed
 
+            after_two_factor_auth_failure_threshold_reached :reset_two_factor_auth_failure_count
+            after_two_factor_auth_failure_threshold_reached :disable_two_factor_auth_on_record, if: :should_disable_two_factor_auth_on_record?
+            after_two_factor_auth_failure_threshold_reached :destroy_self
+
             before_save :run_after_two_factor_auth_succeeded_callbacks, if: :should_run_after_two_factor_auth_succeeded_callbacks?
 
             after_save :save_two_factor_auth_cookie, if: :should_call_save_two_factor_auth_cookie_callback?
@@ -173,17 +177,18 @@ module Authlogic
         threshold = self.class.authlogic_ext_config[:two_factor_auth_threshold]
         return unless threshold && attempted_record && attempted_record.get_two_factor_auth_failure_count >= threshold
 
-        reset_two_factor_auth_failure_count
+        run_authlogc_ext_callbacks(:after, :two_factor_auth_failure_threshold_reached)
+      end
 
-        # If we've failed too many times before 2FA has been confirmed,
-        # then we'll disable 2FA on the record, because this means the
-        # user was not able to finish 2FA on the first time. We don't
-        # want to keep the feature enabled if the user can't seem to
-        # get the 2FA working properly.
-        if record && !record.get_two_factor_auth_confirmed
-          # record.set_two_factor_auth_enabled(false)
-        end
+      def disable_two_factor_auth_on_record
+        record&.set_two_factor_auth_enabled(false)
+      end
 
+      def should_disable_two_factor_auth_on_record?
+        record && !record.get_two_factor_auth_confirmed
+      end
+
+      def destroy_self
 				# NOTE: This callback will be called in the validation phase and this will
 				#   only execute on a validation failure. I would like to destroy this
         #   very session, but its still in the validation phase so if I call
@@ -338,7 +343,8 @@ module Authlogic
         #   - def after_two_factor_auth_failed
         callbacks = {
           two_factor_auth_succeeded: %i[after],
-          two_factor_auth_failed: %i[after]
+          two_factor_auth_failed: %i[after],
+          two_factor_auth_failure_threshold_reached: %i[after]
         }
 
         callbacks.each do |callback_type, callback_whens|

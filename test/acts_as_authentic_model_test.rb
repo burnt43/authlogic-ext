@@ -22,6 +22,11 @@ module Authlogic
             two_factor_auth true
             two_factor_auth_threshold 2
           end
+
+          # TODO:
+          #   1. set off threshold before 2FA is confirmed and test that 2fa gets disabled
+          #   2. set off threshold after 2FA is confirmed and test that 2fa remains enabled
+          #   3. clean up the methods in session/models to put them in the right categories
         end
         # }}}
 
