@@ -47,7 +47,6 @@ module Authlogic
           # No 2FA columns should have been changed.
           assert_nil(user.two_factor_auth_key)
           refute(user.two_factor_auth_enabled?)
-          refute(user.two_factor_auth_completed?)
 
           # 2FA methods should not return anything.
           assert_nil(user.two_factor_auth_otp)
@@ -97,7 +96,7 @@ module Authlogic
             # No 2FA columns should have been changed.
             assert_nil(record.two_factor_auth_key)
             refute(record.two_factor_auth_enabled?)
-            refute(record.two_factor_auth_completed?)
+            refute(session.two_factor_auth_completed?)
 
             # 2FA methods should not return anything.
             assert_nil(record.two_factor_auth_otp)

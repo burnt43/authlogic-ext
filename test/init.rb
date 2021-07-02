@@ -97,9 +97,6 @@ module Authlogic
 								t.string :two_factor_auth_persistence_token
 								t.index :two_factor_auth_persistence_token, unique: true
 
-                # TODO: This should be removed
-								t.boolean :two_factor_auth_completed, null: false, default: false
-
                 # Authlogic::Ext (Optional Columns)
                 t.integer :two_factor_auth_failure_count, null: false, default: 0
                 t.datetime :two_factor_auth_last_successful_auth
