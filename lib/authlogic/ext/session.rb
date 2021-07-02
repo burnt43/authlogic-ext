@@ -69,7 +69,10 @@ module Authlogic
       end
 
       def should_run_after_two_factor_auth_succeeded_callbacks?
-        two_factor_auth_code_provided? && record
+        two_factor_auth_enabled? &&
+        two_factor_auth_code_provided? &&
+        record &&
+        record.get_two_factor_auth_enabled
       end
 
       def update_two_factor_auth_last_successful_auth

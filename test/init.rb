@@ -116,7 +116,7 @@ module Authlogic
         #   keeping them because they are cool and I may need to look back
         #   at them in the future.
 
-        def generate_acts_as_authentic_class(name, &block)
+        def generate_acts_as_authentic_class(name, use_mtt_vanilla_authlogic_options: true, &block)
           Class.new(ActiveRecord::Base).tap do |c|
             c.table_name = 'web_users'
 
@@ -143,6 +143,15 @@ module Authlogic
                 end
               end
 
+              if use_mtt_vanilla_authlogic_options
+                acts_as_authentic do |config|
+                  config.perishable_token_valid_for = 3600
+                  config.validate_email_field = false
+                  config.crypto_provider = Authlogic::CryptoProviders::Sha512
+                  config.merge_validates_length_of_password_field_options(minimum: 8)
+                end
+              end
+
               # Include the Ext functionality.
               include Authlogic::Ext::ActsAsAuthentic::Model
             end
@@ -151,7 +160,7 @@ module Authlogic
           end
         end
 
-        def generate_session_class(name, acts_as_authentic_class: nil, &block)
+        def generate_session_class(name, use_mtt_vanilla_authlogic_options: true, acts_as_authentic_class: nil, &block)
           Class.new(Authlogic::Session::Base).tap do |c|
             c.class_eval do
               # See 'generate_acts_as_authentic_class' for explanation.
@@ -167,6 +176,13 @@ module Authlogic
                 define_method :klass_name do
                   name
                 end
+              end
+
+              if use_mtt_vanilla_authlogic_options
+                generalize_credentials_error_messages true
+                allow_http_basic_auth false
+                find_by_login_method :find_by_username
+                login_field :username
               end
 
               # Include the Ext functionality.
