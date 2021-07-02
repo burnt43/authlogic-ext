@@ -18,6 +18,10 @@ module Authlogic
 
             after_persisting :check_two_factor_auth_persistence_token
 
+            after_two_factor_auth_succeeded :foobar
+            after_two_factor_auth_succeeded :reset_two_factor_auth_persistence_token, if: :should_reset_two_factor_auth_persistence_token?
+
+            before_save :run_after_two_factor_auth_succeeded_callbacks, if: :should_run_after_two_factor_auth_succeeded_callbacks?
             before_save :update_ext_info
 
             after_save :save_two_factor_auth_cookie, if: :should_call_save_two_factor_auth_cookie_callback?
@@ -27,6 +31,11 @@ module Authlogic
             after_destroy :destroy_two_factor_auth_cookie
           end
         end
+      end
+
+      # TODO: remove this
+      def foobar
+        jcarson_debug(__method__)
       end
 
       # --------------------------------------------------
@@ -51,6 +60,14 @@ module Authlogic
 
       def two_factor_auth_completed?
         @two_factor_auth_completed
+      end
+
+      def run_after_two_factor_auth_succeeded_callbacks
+        run_authlogc_ext_callbacks(:after, :two_factor_auth_succeeded)
+      end
+
+      def should_run_after_two_factor_auth_succeeded_callbacks?
+        two_factor_auth_code_provided? && record
       end
 
       # --------------------------------------------------
@@ -184,9 +201,7 @@ module Authlogic
         # this to mean that the Session object was saved successfully with
         # a 2FA code.
         if two_factor_auth_code_provided? && record
-          if should_reset_two_factor_auth_persistence_token?
-            reset_two_factor_auth_persistence_token
-          end
+          jcarson_debug('hello')
 
           # Reset the failure count.
           reset_two_factor_auth_failure_count
@@ -233,6 +248,33 @@ module Authlogic
       end
 
       # --------------------------------------------------
+      # Authlogic::Ext Callback Methods
+      # --------------------------------------------------
+
+      def run_authlogc_ext_callbacks(callback_when, callback_type)
+        callbacks = self.class.authlogic_ext_callbacks.dig(callback_type.to_sym, callback_when.to_sym)
+        return unless callbacks
+
+        callbacks.each do |callback_config|
+          callback_object = callback_config[:callback_object]
+          next unless callback_object
+
+          if_condition = callback_config[:if]
+          next if if_condition && !execute_authlogic_ext_callback_object(if_condition)
+
+          execute_authlogic_ext_callback_object(callback_object)
+        end
+      end
+
+      def execute_authlogic_ext_callback_object(callback_object)
+        if callback_object.is_a?(Proc)
+          instance_exec(&callback_object)
+        else
+          send(callback_object)
+        end
+      end
+
+      # --------------------------------------------------
       # Class Methods
       # --------------------------------------------------
 
@@ -266,6 +308,38 @@ module Authlogic
           (authlogic_ext_config[:ignore_two_factor_auth_redirection_on] || []).none? do |controller_action_name|
             current_controller_action_name == controller_action_name
           end
+        end
+
+        # REVIEW: I should probably figure out how to utilize ActiveRecord's
+        #   callback system, but I can quickly just write my own.
+
+        # NOTE: This is meta-programming to basically define the following
+        #   methods. (Including, but not limited to):
+        #   - def after_two_factor_auth_succeeded
+        #   - def after_two_factor_auth_failed
+        callbacks = {
+          two_factor_auth_succeeded: %i[after],
+          two_factor_auth_failed: %i[after]
+        }
+
+        callbacks.each do |callback_type, callback_whens|
+          callback_whens.each do |callback_when|
+            define_callback_method_name = "#{callback_when}_#{callback_type}"
+
+            define_method define_callback_method_name do |method_or_proc, **options|
+              @authlogic_ext_callbacks ||= {}
+              @authlogic_ext_callbacks[callback_type] = {}
+              @authlogic_ext_callbacks[callback_type][callback_when] ||= []
+              @authlogic_ext_callbacks[callback_type][callback_when].push({
+                callback_object: method_or_proc,
+                options: options
+              })
+            end
+          end
+        end
+
+        def authlogic_ext_callbacks
+          @authlogic_ext_callbacks || {}
         end
       end
     end
