@@ -118,15 +118,15 @@ module Authlogic
             assert(record.two_factor_auth_enabled?)
             # A key should have automatically been generated.
             refute_nil(record.two_factor_auth_key)
-            # act_like_two_factor_auth_completed_on_enable=true, so this will
-            # get set to true.
-            assert(record.two_factor_auth_completed)
-            # The OTP methods should now give some data.
-            refute_nil(record.two_factor_auth_otp)
-            refute_nil(record.two_factor_auth_otp_code)
-            refute_nil(record.two_factor_auth_otp_uri)
-            refute_nil(record.two_factor_auth_qr_code)
-            refute_nil(record.two_factor_auth_qr_code_svg)
+            # # act_like_two_factor_auth_completed_on_enable=true, so this will
+            # # get set to true.
+            # assert(session.two_factor_auth_completed?)
+            # # The OTP methods should now give some data.
+            # refute_nil(record.two_factor_auth_otp)
+            # refute_nil(record.two_factor_auth_otp_code)
+            # refute_nil(record.two_factor_auth_otp_uri)
+            # refute_nil(record.two_factor_auth_qr_code)
+            # refute_nil(record.two_factor_auth_qr_code_svg)
           end
 
           # --------------------------------------------------
@@ -136,9 +136,7 @@ module Authlogic
             # Logout by destroying the session.
             session.destroy
 
-            # The user should have its completed flag unset. Which will require
-            # the user to enter 2FA on its next login.
-            refute(record.two_factor_auth_completed?)
+            refute(session.two_factor_auth_completed?)
           end
 
           # --------------------------------------------------
@@ -237,7 +235,7 @@ module Authlogic
           # --------------------------------------------------
           session_class.within_request do |session, record|
             session.destroy
-            refute(record.two_factor_auth_completed?)
+            refute(session.two_factor_auth_completed?)
           end
 
           # --------------------------------------------------

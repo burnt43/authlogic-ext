@@ -13,8 +13,6 @@ module Authlogic
 
               # Try and make a new 2FA key.
               before_save :generate_two_factor_auth_key, if: :two_factor_auth_has_changed_to_enabled?
-              before_save :set_two_factor_auth_completed_flag, if: :should_set_two_factor_auth_completed_flag?
-              before_save :unset_two_factor_auth_completed_flag, if: :should_unset_two_factor_auth_completed_flag?
             end
           end
         end
@@ -25,12 +23,10 @@ module Authlogic
 
         # Define getter/setters for attributes that can have whatever actual
         # columns names you want in your table.
-        # TODO: remove two_factor_auth_completed
         %i[
           two_factor_auth_key
           two_factor_auth_enabled
           two_factor_auth_persistence_token
-          two_factor_auth_completed
           two_factor_auth_failure_count
           two_factor_auth_last_successful_auth
         ].each do |virtual_attr_name|
@@ -82,18 +78,6 @@ module Authlogic
           end
         end
 
-        def set_two_factor_auth_completed_flag
-          set_two_factor_auth_completed(true)
-        end
-
-        def unset_two_factor_auth_completed_flag
-          set_two_factor_auth_completed(false)
-
-          # Return true otherwise this will mess up ActiveRecord's before_save
-          # callback system and abort the mission.
-          true
-        end
-
         # --------------------------------------------------
         # Callback Conditional Instance Methods
         # --------------------------------------------------
@@ -104,16 +88,6 @@ module Authlogic
           return false unless acts_as_authentic_ext_config.two_factor_auth_required?
 
           get_two_factor_auth_enabled_changes == [false, true]
-        end
-
-        def should_set_two_factor_auth_completed_flag?
-          acts_as_authentic_ext_config.act_like_two_factor_auth_completed_on_enable &&
-          two_factor_auth_has_changed_to_enabled?
-        end
-
-
-        def should_unset_two_factor_auth_completed_flag?
-          two_factor_auth_has_changed_to_disabled?
         end
 
         def two_factor_auth_has_changed_to_disabled?

@@ -37,15 +37,9 @@ module Authlogic
         record.set_two_factor_auth_failure_count(0)
       end
 
-      def reset_two_factor_auth_persistence_token
-        record.set_two_factor_auth_persistence_token(Authlogic::Random.hex_token)
-      end
-
-      def should_reset_two_factor_auth_persistence_token?
-        return false unless record
-
-        record.get_two_factor_auth_persistence_token.nil?
-      end
+      # --------------------------------------------------
+      # 2FA Completion Methods
+      # --------------------------------------------------
 
       def set_two_factor_auth_completed_flag
         @two_factor_auth_completed = true
@@ -57,6 +51,20 @@ module Authlogic
 
       def two_factor_auth_completed?
         @two_factor_auth_completed
+      end
+
+      # --------------------------------------------------
+      # 2FA Persistence Token Methods
+      # --------------------------------------------------
+
+      def reset_two_factor_auth_persistence_token
+        record.set_two_factor_auth_persistence_token(Authlogic::Random.hex_token)
+      end
+
+      def should_reset_two_factor_auth_persistence_token?
+        return false unless record
+
+        record.get_two_factor_auth_persistence_token.nil?
       end
 
       # --------------------------------------------------
@@ -176,10 +184,6 @@ module Authlogic
         # this to mean that the Session object was saved successfully with
         # a 2FA code.
         if two_factor_auth_code_provided? && record
-          # Set 2FA flag to complete. The user has successfully authenticated
-          # with both their password and their 2FA code.
-          record.set_two_factor_auth_completed(true)
-
           if should_reset_two_factor_auth_persistence_token?
             reset_two_factor_auth_persistence_token
           end
@@ -190,16 +194,6 @@ module Authlogic
           # Set last_successful_auth to right now!
           record.set_two_factor_auth_last_successful_auth(Time.now)
         end
-      end
-
-      # This is a 'before_destroy' callback. When destroying an Authlogic
-      # session, this will be called. When destroying a session(logging out),
-      # we need to unset the 'two_factor_auth_completed' flag.
-      # TODO: remove this
-      def unset_two_factor_auth_completed_flag
-        return unless record
-
-        record.set_two_factor_auth_completed(false)
       end
 
       # --------------------------------------------------
