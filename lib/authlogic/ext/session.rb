@@ -18,11 +18,12 @@ module Authlogic
 
             after_persisting :check_two_factor_auth_persistence_token
 
-            after_two_factor_auth_succeeded :foobar
             after_two_factor_auth_succeeded :reset_two_factor_auth_persistence_token, if: :should_reset_two_factor_auth_persistence_token?
+            after_two_factor_auth_succeeded :reset_two_factor_auth_failure_count
+            after_two_factor_auth_succeeded :update_two_factor_auth_last_successful_auth
+            after_two_factor_auth_succeeded :set_two_factor_auth_confirmed
 
             before_save :run_after_two_factor_auth_succeeded_callbacks, if: :should_run_after_two_factor_auth_succeeded_callbacks?
-            before_save :update_ext_info
 
             after_save :save_two_factor_auth_cookie, if: :should_call_save_two_factor_auth_cookie_callback?
 
@@ -31,11 +32,6 @@ module Authlogic
             after_destroy :destroy_two_factor_auth_cookie
           end
         end
-      end
-
-      # TODO: remove this
-      def foobar
-        jcarson_debug(__method__)
       end
 
       # --------------------------------------------------
@@ -68,6 +64,14 @@ module Authlogic
 
       def should_run_after_two_factor_auth_succeeded_callbacks?
         two_factor_auth_code_provided? && record
+      end
+
+      def update_two_factor_auth_last_successful_auth
+        record.set_two_factor_auth_last_successful_auth(Time.now)
+      end
+
+      def set_two_factor_auth_confirmed
+        record.set_two_factor_auth_confirmed(true)
       end
 
       # --------------------------------------------------
@@ -193,24 +197,6 @@ module Authlogic
         end
       end
 
-      # Update an additional info here. This method is a 'before_save' callback.
-      # This will happen if a login is successful or a 2FA code entry is
-      # successful.
-      def update_ext_info
-        # If a 2FA code was provided and a record exists, then we consider
-        # this to mean that the Session object was saved successfully with
-        # a 2FA code.
-        if two_factor_auth_code_provided? && record
-          jcarson_debug('hello')
-
-          # Reset the failure count.
-          reset_two_factor_auth_failure_count
-
-          # Set last_successful_auth to right now!
-          record.set_two_factor_auth_last_successful_auth(Time.now)
-        end
-      end
-
       # --------------------------------------------------
       # Callback Conditional Instance Methods
       # --------------------------------------------------
@@ -328,7 +314,7 @@ module Authlogic
 
             define_method define_callback_method_name do |method_or_proc, **options|
               @authlogic_ext_callbacks ||= {}
-              @authlogic_ext_callbacks[callback_type] = {}
+              @authlogic_ext_callbacks[callback_type] ||= {}
               @authlogic_ext_callbacks[callback_type][callback_when] ||= []
               @authlogic_ext_callbacks[callback_type][callback_when].push({
                 callback_object: method_or_proc,

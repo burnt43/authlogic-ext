@@ -26,6 +26,7 @@ module Authlogic
         %i[
           two_factor_auth_key
           two_factor_auth_enabled
+          two_factor_auth_confirmed
           two_factor_auth_persistence_token
           two_factor_auth_failure_count
           two_factor_auth_last_successful_auth
