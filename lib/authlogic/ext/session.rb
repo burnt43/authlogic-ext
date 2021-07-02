@@ -17,6 +17,11 @@ module Authlogic
             after_persisting :check_two_factor_auth_persistence_token, if: :should_check_two_factor_auth_persistence_token?
 
             after_two_factor_auth_failed :increment_two_factor_auth_failure_count
+
+            # NOTE: I think this callback should be last in the
+            #   after_two_factor_auth_failed group. If you add more, then it
+            #   should be defined before this one, unless you have a good
+            #   reason to add it afterwards.
             after_two_factor_auth_failed :check_two_factor_auth_failure_threshold_reached
 
             after_two_factor_auth_succeeded :reset_two_factor_auth_persistence_token, if: :should_reset_two_factor_auth_persistence_token?
@@ -166,6 +171,15 @@ module Authlogic
         return unless threshold && attempted_record && attempted_record.get_two_factor_auth_failure_count >= threshold
 
         reset_two_factor_auth_failure_count
+
+        # If we've failed too many times before 2FA has been confirmed,
+        # then we'll disable 2FA on the record, because this means the
+        # user was not able to finish 2FA on the first time. We don't
+        # want to keep the feature enabled if the user can't seem to
+        # get the 2FA working properly.
+        if record && !record.get_two_factor_auth_confirmed
+          # record.set_two_factor_auth_enabled(false)
+        end
 
 				# NOTE: This callback will be called in the validation phase and this will
 				#   only execute on a validation failure. I would like to destroy this
