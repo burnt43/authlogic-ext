@@ -15,7 +15,6 @@ module Authlogic
               config.two_factor_auth = true
               config.two_factor_auth_otp_class = ROTP::TOTP
               config.two_factor_auth_otp_code_method = :now
-              config.act_like_two_factor_auth_completed_on_enable = true
             end
           end
 
