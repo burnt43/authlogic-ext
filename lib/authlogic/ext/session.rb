@@ -283,7 +283,7 @@ module Authlogic
           callback_object = callback_config[:callback_object]
           next unless callback_object
 
-          if_condition = callback_config[:if]
+          if_condition = callback_config.dig(:options, :if)
           next if if_condition && !execute_authlogic_ext_callback_object(if_condition)
 
           execute_authlogic_ext_callback_object(callback_object)
