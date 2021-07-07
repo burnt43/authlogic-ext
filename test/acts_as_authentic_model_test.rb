@@ -4,6 +4,121 @@ module Authlogic
   module Ext
     module Testing
       class ActsAsAuthenticModelTest < Authlogic::Ext::Testing::Test
+        # {{{ test_destroy_cookie_on_2fa_disable_without_simulated_gui
+        def test_destroy_cookie_on_2fa_disable_without_simulated_gui
+          Authlogic::Session::Base.controller = nil
+
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+          end
+
+          # --------------------------------------------------
+          # Create a User
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          )
+          result = user.save
+          assert(result)
+
+          # --------------------------------------------------
+          # Disable 2FA on User
+          # --------------------------------------------------
+          user.update_attributes(two_factor_auth_enabled: false)
+        end
+        # }}}
+
+        # {{{ test_destroy_cookie_on_2fa_disable_in_simulated_gui
+        def test_destroy_cookie_on_2fa_disable_in_simulated_gui
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+          end
+
+          # --------------------------------------------------
+          # Create a User
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          )
+          result = user.save
+          assert(result)
+
+          assert_nil(Authlogic::Session::Base.controller.cookies['two_factor_auth_credentials'])
+
+          # --------------------------------------------------
+          # Login Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'some*password'
+            )
+            save_result = new_session.save
+            assert(save_result)
+
+            assert_nil(Authlogic::Session::Base.controller.cookies['two_factor_auth_credentials'])
+          end
+
+          # --------------------------------------------------
+          # Enter 2FA Code Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            session.two_factor_auth_code = record.two_factor_auth_otp_code
+            result = session.save
+            assert(result)
+
+            refute_nil(Authlogic::Session::Base.controller.cookies['two_factor_auth_credentials'])
+          end
+
+          # --------------------------------------------------
+          # Disable 2FA on User
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            result = record.update_attributes(two_factor_auth_enabled: false)
+            assert(result)
+
+            assert_nil(Authlogic::Session::Base.controller.cookies['two_factor_auth_credentials'])
+          end
+        end
+        # }}}
+
         # {{{ def test_simulate_2fa_failures
         def test_simulate_2fa_failures
           user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do

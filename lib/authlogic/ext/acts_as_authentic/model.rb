@@ -13,6 +13,8 @@ module Authlogic
 
               # Try and make a new 2FA key.
               before_save :generate_two_factor_auth_key, if: :two_factor_auth_has_changed_to_enabled?
+              before_save :remove_two_factor_auth_confirmation, if: :two_factor_auth_has_changed_to_disabled?
+              after_save :destroy_two_factor_auth_cookie, if: :two_factor_auth_has_changed_to_disabled?
             end
           end
         end
@@ -77,6 +79,24 @@ module Authlogic
           if get_two_factor_auth_key.nil? || force
             set_two_factor_auth_key(ROTP::Base32.random)
           end
+        end
+
+        def remove_two_factor_auth_confirmation
+          # set_two_factor_auth_confirmed(false)
+        end
+
+        # REVIEW: I'm not sure this should actually be in here. Maybe the app
+        #   that uses this gem should be responsible for this I'm not sure.
+        # REVIEW: There is some hard-coded repitition here. I'm essentially
+        #   calling the Authlogic::Ext::Session#destroy_two_factor_auth_cookie
+        #   method without calling it, because I don't have the session object
+        #   here. I could probably do a Session.find(), but I don't know the
+        #   Session class in this part of the code. I could add it as a config
+        #   option maybe. This works, but its a bad smell.
+        def destroy_two_factor_auth_cookie
+          return unless Authlogic::Session::Base.controller
+
+          Authlogic::Session::Base.controller.cookies.delete 'two_factor_auth_credentials', :domain => Authlogic::Session::Base.controller.cookie_domain
         end
 
         # --------------------------------------------------
