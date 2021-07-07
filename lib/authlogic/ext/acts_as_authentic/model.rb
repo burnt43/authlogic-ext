@@ -82,7 +82,7 @@ module Authlogic
         end
 
         def remove_two_factor_auth_confirmation
-          # set_two_factor_auth_confirmed(false)
+          true.tap { set_two_factor_auth_confirmed(false) }
         end
 
         # REVIEW: I'm not sure this should actually be in here. Maybe the app

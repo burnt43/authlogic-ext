@@ -4,6 +4,45 @@ module Authlogic
   module Ext
     module Testing
       class ActsAsAuthenticModelTest < Authlogic::Ext::Testing::Test
+        # {{{ test_remove_two_factor_auth_confirmation
+        def test_remove_two_factor_auth_confirmation
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+          end
+
+          # --------------------------------------------------
+          # Create a User
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_confirmed: true
+          )
+          result = user.save
+          assert(result)
+          assert(user.two_factor_auth_confirmed?)
+
+          # --------------------------------------------------
+          # Disable 2FA on User
+          # --------------------------------------------------
+          user.update_attributes(two_factor_auth_enabled: false)
+          refute(user.two_factor_auth_confirmed?)
+        end
+        # }}}
+
         # {{{ test_destroy_cookie_on_2fa_disable_without_simulated_gui
         def test_destroy_cookie_on_2fa_disable_without_simulated_gui
           Authlogic::Session::Base.controller = nil
