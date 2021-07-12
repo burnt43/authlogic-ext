@@ -18,6 +18,12 @@ require 'rotp'
 require 'rqrcode'
 require 'stringio'
 
+# NOTE: We need ActionController::Parameters to use for simulating params, but
+# to properly require the strong_parameters file, we also need the
+# uploaded_file file as well.
+require 'rack/test/uploaded_file'
+require 'action_controller/metal/strong_parameters'
+
 module Kernel
   def jcarson_debug(msg)
     puts "[\033[0;34mJCARSON\033[0;0m] - #{msg}"
@@ -33,8 +39,18 @@ module Authlogic
       module ClassMethods
         # Pretend like we're making a web request and yield to the given block
         # the session and record we've found.
-        def within_request(&block)
+        def within_request(clear_cookies: false, params: nil, &block)
           if block
+            if Authlogic::Session::Base.controller
+              if clear_cookies
+                Authlogic::Session::Base.controller.clear_cookies!
+              end
+
+              if params
+                Authlogic::Session::Base.controller.params = params
+              end
+            end
+
             session = find
             block.call(session, session&.record)
           end
@@ -145,6 +161,7 @@ module Authlogic
 
               if use_mtt_vanilla_authlogic_options
                 acts_as_authentic do |config|
+                  # These options are straight out of the hpbxgui app.
                   config.perishable_token_valid_for = 3600
                   config.validate_email_field = false
                   config.crypto_provider = Authlogic::CryptoProviders::Sha512
@@ -179,10 +196,16 @@ module Authlogic
               end
 
               if use_mtt_vanilla_authlogic_options
+                # These options are straight out of the hpbxgui app.
                 generalize_credentials_error_messages true
                 allow_http_basic_auth false
                 find_by_login_method :find_by_username
                 login_field :username
+                # This seems to be the default option, however this seems
+                # to behave differently when generating classes instead
+                # of statically defining them. So I need to set it
+                # explicitly to the default value.
+                params_key 'user_credentials'
               end
 
               # Include the Ext functionality.
@@ -217,6 +240,10 @@ module Authlogic
           end
         end
 
+        def clear_cookies!
+          cookies.backend_hash.clear
+        end
+
         def cookies
           @cookies ||= Object.new.tap do |o|
             def o.backend_hash
@@ -240,12 +267,24 @@ module Authlogic
         def cookie_domain
         end
 
+        def params=(raw_hash)
+          @params = ActionController::Parameters.new(raw_hash)
+        end
+
         def params
-          @params ||= {}
+          @params ||= ActionController::Parameters.new({})
         end
 
         def session
           @session ||= {}
+        end
+
+        def responds_to_single_access_allowed?
+          true
+        end
+
+        def single_access_allowed?
+          true
         end
       end
 

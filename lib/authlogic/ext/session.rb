@@ -222,11 +222,22 @@ module Authlogic
           if !record.get_two_factor_auth_persistence_token.blank? &&
              record.get_two_factor_auth_persistence_token == two_factor_auth_persistence_token_from_cookie
           then
+            # The cookie matches, so we'll set the flag.
             set_two_factor_auth_completed_flag
           else
-            unset_two_factor_auth_completed_flag
+            if single_access
+              # If we couldn't match based on the cookie, but we authenticated
+              # with the single access token, then we'll just set the flag
+              # here without needing to actually send the 2FA code.
+              set_two_factor_auth_completed_flag
+            else
+              # No single access given and cookie doesn't match so unset the
+              # flag.
+              unset_two_factor_auth_completed_flag
+            end
           end
         else
+          # No record was even found, so unset the flag.
           unset_two_factor_auth_completed_flag
         end
       end
