@@ -39,7 +39,6 @@ module Authlogic
           setter_method_name = "set_#{virtual_attr_name}"
           change_method_name = "get_#{virtual_attr_name}_changes"
 
-
           define_method getter_method_name do
             actual_attr_name = acts_as_authentic_ext_config&.send(config_attr_name_method)
             return unless actual_attr_name && respond_to?(actual_attr_name)
