@@ -4,6 +4,79 @@ module Authlogic
   module Ext
     module Testing
       class ActsAsAuthenticModelTest < Authlogic::Ext::Testing::Test
+        # {{{ test_2fa_interaction_with_single_access_token
+        def test_2fa_interaction_with_single_access_token
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+          end
+
+          # --------------------------------------------------
+          # Create a User
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+          )
+          result = user.save
+          assert(result)
+
+          # --------------------------------------------------
+          # 'Request' without Logging In
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            # We should not find any session, because we did not offer
+            # any cookies or params that could identify us.
+            assert_nil(session)
+            assert_nil(record)
+          end
+
+          # --------------------------------------------------
+          # 'Request' with Single Access Token
+          # --------------------------------------------------
+          session_class.within_request(
+            clear_cookies: true,
+            params: {user_credentials: user.single_access_token}
+          ) do |session, record|
+            # We should find a session, because we're giving the single
+            # access token within the params.
+            refute_nil(session)
+            refute_nil(record)
+
+            # Using the Single Access Token should override the need for any
+            # 2FA. We should be considered fully authenticated just be giving
+            # the Single Access Token.
+            # REVIEW: Maybe this should be configurable at some point.
+            refute(session.record_has_two_factor_auth_required_and_uncompleted?)
+          end
+
+          # --------------------------------------------------
+          # 'Request' with Cookies
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            # We should be 'logged in' now because of the single access
+            # token. We don't have to provide it again, because it should
+            # have written to the cookies.
+            refute_nil(session)
+            refute_nil(record)
+
+            refute(session.record_has_two_factor_auth_required_and_uncompleted?)
+          end
+        end
+        # }}}
+
         # {{{ test_remove_two_factor_auth_confirmation
         def test_remove_two_factor_auth_confirmation
           user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
