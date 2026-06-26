@@ -19,6 +19,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -92,6 +93,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -133,6 +135,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -169,6 +172,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -247,6 +251,7 @@ module Authlogic
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
             two_factor_auth_threshold 2
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -451,6 +456,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -587,6 +593,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth true
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -699,6 +706,7 @@ module Authlogic
 
           session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
             two_factor_auth false
+            two_factor_auth_required_for_all false
           end
 
           # --------------------------------------------------
@@ -792,6 +800,209 @@ module Authlogic
             assert_equal(0, record.two_factor_auth_failure_count)
             refute(record.two_factor_auth_enabled?)
             refute(record.two_factor_auth_confirmed?)
+          end
+        end
+        # }}}
+        # {{{ test_two_factor_auth_disable_on_threshold_failure_false
+        def test_two_factor_auth_disable_on_threshold_failure_false
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+            two_factor_auth_threshold 2
+            two_factor_auth_required_for_all true
+            two_factor_auth_disable_on_threshold_failure false
+          end
+
+          # --------------------------------------------------
+          # Create a User
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          )
+          result = user.save
+          assert(result)
+
+          # --------------------------------------------------
+          # Login Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'some*password'
+            )
+            save_result = new_session.save
+            assert(save_result)
+
+            assert(new_session.record_has_two_factor_auth_required_and_uncompleted?)
+          end
+
+          # --------------------------------------------------
+          # Enter 2FA Wrong Code (2x, hitting threshold)
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            session.two_factor_auth_code = 'abcdef'
+            result = session.save
+            refute(result)
+
+            assert(record.two_factor_auth_enabled?)
+            assert_equal(1, record.two_factor_auth_failure_count)
+          end
+
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            session.two_factor_auth_code = 'uvwxyz'
+            result = session.save
+            refute(result)
+
+            # With disable_on_threshold_failure false, 2FA must NOT be
+            # disabled even though the user never confirmed. Failure count
+            # resets and session is destroyed, but the enabled flag is
+            # untouched.
+            assert(record.two_factor_auth_enabled?)
+            assert_equal(0, record.two_factor_auth_failure_count)
+          end
+
+          # --------------------------------------------------
+          # Session Was Destroyed by Threshold
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+          end
+
+          # --------------------------------------------------
+          # Login Again - 2FA Still Required
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'some*password'
+            )
+            save_result = new_session.save
+            assert(save_result)
+
+            assert(new_session.record_has_two_factor_auth_required_and_uncompleted?)
+            assert(new_session.record.two_factor_auth_enabled?)
+          end
+        end
+        # }}}
+
+        # {{{ test_two_factor_auth_required_for_all
+        def test_two_factor_auth_required_for_all
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+            two_factor_auth_required_for_all true
+            two_factor_auth_disable_on_threshold_failure false
+          end
+
+          # --------------------------------------------------
+          # Create a User with two_factor_auth_enabled false
+          # --------------------------------------------------
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password'
+            # two_factor_auth_enabled is false by default
+          )
+          result = user.save
+          assert(result)
+          refute(user.two_factor_auth_enabled?)
+
+          # The model callback only generates a TOTP key when
+          # two_factor_auth_enabled changes to true. Assign one manually
+          # to simulate the migration the app uses to seed keys for all
+          # existing users.
+          user.update_column(:two_factor_auth_key, ROTP::Base32.random)
+          refute_nil(user.two_factor_auth_key)
+
+          # --------------------------------------------------
+          # Login Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'some*password'
+            )
+            save_result = new_session.save
+            assert(save_result)
+
+            # Even though two_factor_auth_enabled is false on the record,
+            # required_for_all means 2FA is still enforced.
+            assert(new_session.record_has_two_factor_auth_required_and_uncompleted?)
+
+            record = new_session.record
+            refute(record.two_factor_auth_enabled?)
+            refute(record.two_factor_auth_confirmed?)
+            assert_nil(record.two_factor_auth_persistence_token)
+          end
+
+          # --------------------------------------------------
+          # Enter 2FA Code Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            assert(session.record_has_two_factor_auth_required_and_uncompleted?)
+
+            session.two_factor_auth_code = record.two_factor_auth_otp_code
+            result = session.save
+            assert(result)
+
+            # The record's enabled flag is untouched; the 2FA completion
+            # columns are set normally.
+            refute(record.two_factor_auth_enabled?)
+            assert(record.two_factor_auth_confirmed?)
+            refute_nil(record.two_factor_auth_persistence_token)
+            refute_nil(record.two_factor_auth_last_successful_auth)
+            assert_equal(0, record.two_factor_auth_failure_count)
+          end
+
+          # --------------------------------------------------
+          # Subsequent Request - Fully Authenticated
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+            refute(session.record_has_two_factor_auth_required_and_uncompleted?)
           end
         end
         # }}}

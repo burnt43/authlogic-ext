@@ -3,6 +3,28 @@ module Warning
   end
 end
 
+# NOTE: This gem is used with the hpbxgui which is on Ruby 2.X. My development
+#   enviroment can't even compile any Ruby 2.X, so the earliest I can be is Ruby 3.X.
+#   That being the case to get the tests to work, I have to do a bit of monkey patching.
+if RUBY_VERSION.start_with?('3')
+  # BigDecimal.new is called in some places, but in Ruby 3 you just
+  # do BigDecimal(1) instead of BigDecimal.new(1).
+  require 'bigdecimal'
+  class BigDecimal
+    class << self
+      def new(*args, **kw_args, &block)
+        BigDecimal(*args, **kw_args, &block)
+      end
+    end
+  end
+
+  class Integer
+    def =~(*args, **kw_args, &block)
+      self.to_s.=~(*args, **kw_args, &block)
+    end
+  end
+end
+
 unless $SKIP_MINITEST
   require 'minitest/pride'
   require 'minitest/autorun'
@@ -67,6 +89,7 @@ module Authlogic
         def ensure_database_file_exists!
           return if database_file.exist?
 
+          FileUtils.mkdir_p(database_file.parent)
           FileUtils.touch(database_file)
         end
 

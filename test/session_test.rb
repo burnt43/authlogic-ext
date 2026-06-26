@@ -25,6 +25,7 @@ module Authlogic
             login_field :username
 
             two_factor_auth true
+            two_factor_auth_required_for_all false
             ignore_two_factor_auth_redirection_on "namespace1/namespace2/foos#action1"
             ignore_two_factor_auth_redirection_on "bars#action2"
           end

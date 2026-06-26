@@ -76,7 +76,7 @@ module Authlogic
         two_factor_auth_enabled? &&
         two_factor_auth_code_provided? &&
         record &&
-        record.get_two_factor_auth_enabled
+        two_factor_auth_required_for_record?
       end
 
       def update_two_factor_auth_last_successful_auth
@@ -185,7 +185,8 @@ module Authlogic
       end
 
       def should_disable_two_factor_auth_on_record?
-        record && !record.get_two_factor_auth_confirmed
+        self.class.authlogic_ext_config.fetch(:two_factor_auth_disable_on_threshold_failure, true) &&
+          record && !record.get_two_factor_auth_confirmed
       end
 
       def destroy_self
@@ -254,7 +255,7 @@ module Authlogic
       # validation method. This is called to even see if we should be 
       # calling that validation.
       def should_check_for_two_factor_auth_code_validity?
-        two_factor_auth_enabled? && record&.get_two_factor_auth_enabled
+        two_factor_auth_enabled? && two_factor_auth_required_for_record?
       end
 
       # We have set the two_factor_auth_code attr to something, therefore
@@ -279,7 +280,15 @@ module Authlogic
       # entry successfully? This basically means the user logged in OK
       # with a username/password, but did not enter a good 2FA code yet.
       def record_has_two_factor_auth_required_and_uncompleted?
-        record&.get_two_factor_auth_enabled && !two_factor_auth_completed?
+        two_factor_auth_required_for_record? && !two_factor_auth_completed?
+      end
+
+      # Is 2FA required for this record? True if the session-level
+      # 'two_factor_auth_required_for_all' config is set, or if the record
+      # itself has two_factor_auth enabled.
+      def two_factor_auth_required_for_record?
+        self.class.authlogic_ext_config[:two_factor_auth_required_for_all] ||
+          record&.get_two_factor_auth_enabled
       end
 
       # --------------------------------------------------
@@ -317,6 +326,23 @@ module Authlogic
 
         # Config method for enabling/disabling two_factor_auth feature.
         def two_factor_auth(value)
+          @authlogic_ext_config ||= {}
+          @authlogic_ext_config[__method__.to_sym] = value
+        end
+
+        # When the failure threshold is reached and the user has not yet
+        # confirmed 2FA setup, controls whether two_factor_auth_enabled is
+        # set to false on the record. Defaults to true (existing behavior).
+        # Set to false when 2FA is required for all users and must not be
+        # disabled by repeated failures.
+        def two_factor_auth_disable_on_threshold_failure(value)
+          @authlogic_ext_config ||= {}
+          @authlogic_ext_config[__method__.to_sym] = value
+        end
+
+        # When set to true, 2FA is required for every user regardless of
+        # the per-record two_factor_auth_enabled flag.
+        def two_factor_auth_required_for_all(value)
           @authlogic_ext_config ||= {}
           @authlogic_ext_config[__method__.to_sym] = value
         end
