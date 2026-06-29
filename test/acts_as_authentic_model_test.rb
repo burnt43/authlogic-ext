@@ -1162,6 +1162,47 @@ module Authlogic
         end
         # }}}
 
+        # {{{ test_two_factor_auth_method_validation
+        def test_two_factor_auth_method_validation
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+            end
+          end
+
+          base_attrs = {
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          }
+
+          # --------------------------------------------------
+          # Invalid method is rejected.
+          # --------------------------------------------------
+          invalid_user = user_class.new(base_attrs.merge(two_factor_auth_method: 'bogus'))
+          refute(invalid_user.save)
+          assert(invalid_user.errors.key?(:two_factor_auth_method))
+
+          # --------------------------------------------------
+          # Valid methods are accepted.
+          # --------------------------------------------------
+          auth_user = user_class.new(base_attrs.merge(two_factor_auth_method: 'authenticator'))
+          assert(auth_user.save)
+
+          email_user = user_class.new(base_attrs.merge(username: 'user02', two_factor_auth_method: 'email'))
+          assert(email_user.save)
+        end
+        # }}}
+
         # {{{ test_two_factor_auth_required_for_all
         def test_two_factor_auth_required_for_all
           user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do

@@ -269,6 +269,11 @@ module Authlogic
             block.call(config)
 
             @acts_as_authentic_ext_config = config
+
+            if config.two_factor_auth_method_attr_name
+              validates config.two_factor_auth_method_attr_name,
+                        inclusion: { in: %w[authenticator email] }
+            end
           end
 
           def acts_as_authentic_ext_config
