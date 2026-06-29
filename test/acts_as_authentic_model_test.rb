@@ -911,6 +911,257 @@ module Authlogic
         end
         # }}}
 
+        # {{{ test_email_two_factor_auth_deliver_proc_is_called
+        def test_email_two_factor_auth_deliver_proc_is_called
+          delivered = nil
+
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+              config.two_factor_auth_email_code_expiry = 600
+              config.two_factor_auth_email_code_deliver_proc = ->(user, code) {
+                delivered = { user: user, code: code }
+              }
+            end
+          end
+
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_method: 'email'
+          )
+          assert(user.save)
+
+          assert_nil(delivered)
+          assert_nil(user.two_factor_auth_email_code)
+          assert_nil(user.two_factor_auth_email_code_sent_at)
+
+          user.generate_two_factor_auth_email_code!
+
+          # Deliver proc was called with the user and a 6-digit code.
+          refute_nil(delivered)
+          assert_equal(user, delivered[:user])
+          assert_match(/\A\d{6}\z/, delivered[:code])
+
+          # Code was persisted.
+          assert_equal(delivered[:code], user.reload.two_factor_auth_email_code)
+          refute_nil(user.two_factor_auth_email_code_sent_at)
+        end
+        # }}}
+
+        # {{{ test_email_two_factor_auth_code_expiry
+        def test_email_two_factor_auth_code_expiry
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+              config.two_factor_auth_email_code_expiry = 600
+              config.two_factor_auth_email_code_deliver_proc = ->(_user, _code) {}
+            end
+          end
+
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_method: 'email'
+          )
+          assert(user.save)
+
+          # No code generated yet — expired by definition.
+          assert(user.two_factor_auth_email_code_expired?)
+          assert_nil(user.two_factor_auth_otp_code)
+
+          # Generate a fresh code.
+          user.generate_two_factor_auth_email_code!
+          refute(user.reload.two_factor_auth_email_code_expired?)
+          refute_nil(user.two_factor_auth_otp_code)
+
+          # Wind the clock back past the expiry threshold.
+          user.update_column(:two_factor_auth_email_code_sent_at, Time.now - 601)
+          assert(user.two_factor_auth_email_code_expired?)
+
+          # two_factor_auth_otp_code returns nil for expired codes.
+          assert_nil(user.two_factor_auth_otp_code)
+        end
+        # }}}
+
+        # {{{ test_email_two_factor_auth_clear_email_data
+        def test_email_two_factor_auth_clear_email_data
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+              config.two_factor_auth_email_code_expiry = 600
+              config.two_factor_auth_email_code_deliver_proc = ->(_user, _code) {}
+            end
+          end
+
+          # --------------------------------------------------
+          # Email method user: clear removes the code.
+          # --------------------------------------------------
+          email_user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_method: 'email'
+          )
+          assert(email_user.save)
+
+          email_user.generate_two_factor_auth_email_code!
+          email_user.reload
+          refute_nil(email_user.two_factor_auth_email_code)
+          refute_nil(email_user.two_factor_auth_email_code_sent_at)
+
+          email_user.clear_two_factor_auth_email_data!
+          email_user.reload
+          assert_nil(email_user.two_factor_auth_email_code)
+          assert_nil(email_user.two_factor_auth_email_code_sent_at)
+
+          # --------------------------------------------------
+          # Authenticator method user: clear is a no-op.
+          # --------------------------------------------------
+          auth_user = user_class.new(
+            username: 'user02',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_method: 'authenticator'
+          )
+          assert(auth_user.save)
+
+          # Manually plant an email code to confirm it is not touched.
+          auth_user.update_columns(
+            two_factor_auth_email_code: '123456',
+            two_factor_auth_email_code_sent_at: Time.now
+          )
+
+          auth_user.clear_two_factor_auth_email_data!
+          auth_user.reload
+          assert_equal('123456', auth_user.two_factor_auth_email_code)
+          refute_nil(auth_user.two_factor_auth_email_code_sent_at)
+        end
+        # }}}
+
+        # {{{ test_simulate_login_with_email_two_factor_auth
+        def test_simulate_login_with_email_two_factor_auth
+          delivered = nil
+
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+              config.two_factor_auth_email_code_expiry = 600
+              config.two_factor_auth_email_code_deliver_proc = ->(user, code) {
+                delivered = { user: user, code: code }
+              }
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            two_factor_auth true
+            two_factor_auth_required_for_all false
+          end
+
+          user = user_class.new(
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true,
+            two_factor_auth_method: 'email'
+          )
+          assert(user.save)
+
+          # --------------------------------------------------
+          # Login Successfully
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            assert_nil(session)
+            assert_nil(record)
+
+            new_session = session_class.new(
+              username: 'user01',
+              password: 'some*password'
+            )
+            assert(new_session.save)
+            assert(new_session.record_has_two_factor_auth_required_and_uncompleted?)
+
+            # Simulate what the controller does: generate and deliver the code.
+            new_session.record.generate_two_factor_auth_email_code!
+            refute_nil(delivered)
+          end
+
+          # --------------------------------------------------
+          # Enter Wrong Email Code
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            session.two_factor_auth_code = '000000'
+            refute(session.save)
+            assert_equal(1, record.two_factor_auth_failure_count)
+          end
+
+          # --------------------------------------------------
+          # Enter Correct Email Code
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+
+            session.two_factor_auth_code = delivered[:code]
+            assert(session.save)
+
+            assert(record.two_factor_auth_confirmed?)
+            refute_nil(record.two_factor_auth_persistence_token)
+            assert_equal(0, record.two_factor_auth_failure_count)
+          end
+
+          # --------------------------------------------------
+          # Subsequent Request - Fully Authenticated
+          # --------------------------------------------------
+          session_class.within_request do |session, record|
+            refute_nil(session)
+            refute_nil(record)
+            refute(session.record_has_two_factor_auth_required_and_uncompleted?)
+          end
+        end
+        # }}}
+
         # {{{ test_two_factor_auth_required_for_all
         def test_two_factor_auth_required_for_all
           user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do

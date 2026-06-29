@@ -32,6 +32,9 @@ module Authlogic
           two_factor_auth_persistence_token
           two_factor_auth_failure_count
           two_factor_auth_last_successful_auth
+          two_factor_auth_method
+          two_factor_auth_email_code
+          two_factor_auth_email_code_sent_at
         ].each do |virtual_attr_name|
           config_attr_name_method = "#{virtual_attr_name}_attr_name"
 
@@ -132,9 +135,74 @@ module Authlogic
           end
         end
 
+        def clear_two_factor_auth_email_data!
+          # Only continue if model instance uses email as 2FA method.
+          return unless get_two_factor_auth_method == 'email'
+
+          # Figure out what the attribute names are for the email_code column
+          # and the sent_at column.
+          email_code_attr = acts_as_authentic_ext_config&.two_factor_auth_email_code_attr_name
+          sent_at_attr = acts_as_authentic_ext_config&.two_factor_auth_email_code_sent_at_attr_name
+
+          # Only continue if we found the attributes.
+          return unless email_code_attr && sent_at_attr
+
+          # Set the attributes to nil.
+          update_columns(email_code_attr => nil, sent_at_attr => nil)
+        end
+
+        def generate_two_factor_auth_email_code!
+          # Figure out what the attribute names are for the email_code column
+          # and the sent_at column.
+          email_code_attr = acts_as_authentic_ext_config&.two_factor_auth_email_code_attr_name
+          sent_at_attr = acts_as_authentic_ext_config&.two_factor_auth_email_code_sent_at_attr_name
+
+          # Only continue if we found the attributes.
+          return unless email_code_attr && sent_at_attr
+
+          # Generate a 6-digit code.
+          code = rand(100_000..999_999).to_s
+
+          # Update this model instance to the code we generated and
+          # set the sent_at to be NOW.
+          update_columns(email_code_attr => code, sent_at_attr => Time.now)
+
+          # Get the configured proc that handles delivery.
+          deliver_proc = acts_as_authentic_ext_config&.two_factor_auth_email_code_deliver_proc
+
+          # Call that proc, if found.
+          deliver_proc.call(self, code) if deliver_proc
+
+          # Return the code.
+          code
+        end
+
         # Return a generated code.
         def two_factor_auth_otp_code
-          two_factor_auth_otp&.send(acts_as_authentic_ext_config.two_factor_auth_otp_code_method)
+          if get_two_factor_auth_method == 'email'
+            # Model instance uses email for 2FA.
+
+            # Code is nil if the code expired.
+            return nil if two_factor_auth_email_code_expired?
+
+            # Get the code. This might be nil if its the first time ever
+            # and the model instance never got a code before, otherwise
+            # it should be an up-to-date code.
+            get_two_factor_auth_email_code
+          else
+            # This is the authenticator case. Call the configured method on the otp class.
+            two_factor_auth_otp&.send(acts_as_authentic_ext_config.two_factor_auth_otp_code_method)
+          end
+        end
+
+        def two_factor_auth_email_code_expired?
+          # If our sent_at time is older than the configured expiry time. The expiry
+          # time defaults to 10 minutes.
+
+          sent_at = get_two_factor_auth_email_code_sent_at
+          expiry  = acts_as_authentic_ext_config&.two_factor_auth_email_code_expiry || 600
+
+          sent_at.nil? || sent_at < (Time.now - expiry)
         end
 
         def two_factor_auth_otp_uri

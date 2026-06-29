@@ -140,6 +140,11 @@ module Authlogic
                 # Authlogic::Ext (Optional Columns)
                 t.integer :two_factor_auth_failure_count, null: false, default: 0
                 t.datetime :two_factor_auth_last_successful_auth
+
+                # Authlogic::Ext (Email 2FA Columns)
+                t.string :two_factor_auth_method, default: 'authenticator'
+                t.string :two_factor_auth_email_code
+                t.datetime :two_factor_auth_email_code_sent_at
 							end
 						end
 					end

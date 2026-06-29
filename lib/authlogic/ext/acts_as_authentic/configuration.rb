@@ -21,6 +21,10 @@ module Authlogic
         define_option :two_factor_auth, false
         alias_method :two_factor_auth_required?, :two_factor_auth
 
+        #
+        # v1 2FA Options (Base Feature with Authenticator Support)
+        #
+
         define_option :two_factor_auth_key_attr_name, :two_factor_auth_key
         define_option :two_factor_auth_enabled_attr_name, :two_factor_auth_enabled
         define_option :two_factor_auth_persistence_token_attr_name, :two_factor_auth_persistence_token
@@ -32,6 +36,19 @@ module Authlogic
         define_option :two_factor_auth_uri_method
         define_option :two_factor_auth_uri_input_method
         define_option :two_factor_auth_uri_qr_code_class
+
+        #
+        # v2 2FA Options (Email Support)
+        #
+        
+        # Option for what kind of 2FA you want: authenticator app or email code.
+        define_option :two_factor_auth_method_attr_name
+
+        # Email related options.
+        define_option :two_factor_auth_email_code_attr_name
+        define_option :two_factor_auth_email_code_sent_at_attr_name
+        define_option :two_factor_auth_email_code_expiry, 600
+        define_option :two_factor_auth_email_code_deliver_proc
       end
     end
   end
