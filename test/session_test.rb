@@ -52,6 +52,71 @@ module Authlogic
           Authlogic::Session::Base.controller = controller03
           refute(session_class.should_redirect_to_two_factor_auth_code_entry?)
         end
+
+        def test_should_redirect_to_two_factor_auth_code_entry_when_session
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic do |config|
+              config.perishable_token_valid_for = 3600
+              config.validate_email_field = false
+              config.crypto_provider = Authlogic::CryptoProviders::Sha512
+              config.merge_validates_length_of_password_field_options(minimum: 8)
+            end
+
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+            end
+          end
+
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class) do
+            generalize_credentials_error_messages true
+            allow_http_basic_auth false
+            find_by_login_method :find_by_username
+            login_field :username
+
+            two_factor_auth true
+            two_factor_auth_required_for_all false
+            ignore_two_factor_auth_redirection_when_session :foo, :equals, 'bar'
+            ignore_two_factor_auth_redirection_when_session :bip, :exists
+            ignore_two_factor_auth_redirection_when_session :baz, :not_exists
+          end
+
+          controller = Authlogic::Ext::Testing::DummyController.new(
+            controller_path: 'widgets',
+            action_name: 'action1'
+          )
+          Authlogic::Session::Base.controller = controller
+
+          # :baz => :not_exists matches by default (no session values set).
+          controller.session[:baz] = 'anything'
+          assert(session_class.should_redirect_to_two_factor_auth_code_entry?)
+
+          # :equals matches on exact value.
+          controller.session[:foo] = 'bar'
+          refute(session_class.should_redirect_to_two_factor_auth_code_entry?)
+          controller.session[:foo] = 'not_bar'
+          assert(session_class.should_redirect_to_two_factor_auth_code_entry?)
+          controller.session.delete(:foo)
+
+          # :exists matches regardless of value.
+          controller.session[:bip] = nil
+          refute(session_class.should_redirect_to_two_factor_auth_code_entry?)
+          controller.session.delete(:bip)
+
+          # :not_exists matches when key is absent.
+          controller.session.delete(:baz)
+          refute(session_class.should_redirect_to_two_factor_auth_code_entry?)
+        end
+
+        def test_ignore_two_factor_auth_redirection_when_session_rejects_invalid_operator
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User')
+          session_class = Authlogic::Ext::Testing.generate_session_class('Authlogic::Ext::Testing::Session', acts_as_authentic_class: user_class)
+
+          assert_raises(ArgumentError) do
+            session_class.ignore_two_factor_auth_redirection_when_session :foo, :bogus, 'bar'
+          end
+        end
       end
     end
   end

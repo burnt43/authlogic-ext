@@ -324,6 +324,14 @@ module Authlogic
 
       module ClassMethods
 
+        # The valid operators accepted by
+        # ignore_two_factor_auth_redirection_when_session.
+        IGNORE_TWO_FACTOR_AUTH_REDIRECTION_SESSION_OPERATORS = %i[
+          equals
+          exists
+          not_exists
+        ].freeze
+
         # Config method for enabling/disabling two_factor_auth feature.
         def two_factor_auth(value)
           @authlogic_ext_config ||= {}
@@ -357,6 +365,28 @@ module Authlogic
           (@authlogic_ext_config[__method__.to_sym] ||= []).push(controller_action_name)
         end
 
+        # Skip redirection to 2FA code entry when a value in the controller
+        # session matches the given condition. The supported operators are:
+        #   - :equals     => session[key] == value
+        #   - :exists     => session has the key
+        #   - :not_exists => session does not have the key
+        #
+        # Examples:
+        #   ignore_two_factor_auth_redirection_when_session(:foo, :equals, 'bar')
+        #   ignore_two_factor_auth_redirection_when_session(:bip, :exists)
+        def ignore_two_factor_auth_redirection_when_session(key, operator, value = nil)
+          unless IGNORE_TWO_FACTOR_AUTH_REDIRECTION_SESSION_OPERATORS.include?(operator)
+            raise ArgumentError, "operator must be one of: #{IGNORE_TWO_FACTOR_AUTH_REDIRECTION_SESSION_OPERATORS.join(', ')}"
+          end
+
+          @authlogic_ext_config ||= {}
+          (@authlogic_ext_config[__method__.to_sym] ||= []).push({
+            key: key,
+            operator: operator,
+            value: value
+          })
+        end
+
         # Return all the configured options as a hash.
         def authlogic_ext_config
           @authlogic_ext_config ||= {}
@@ -366,8 +396,27 @@ module Authlogic
           c = Authlogic::Session::Base.controller
           current_controller_action_name = "#{c.controller_path}##{c.action_name}"
 
-          (authlogic_ext_config[:ignore_two_factor_auth_redirection_on] || []).none? do |controller_action_name|
+          ignored_on_action = (authlogic_ext_config[:ignore_two_factor_auth_redirection_on] || []).any? do |controller_action_name|
             current_controller_action_name == controller_action_name
+          end
+          return false if ignored_on_action
+
+          ignored_by_session = (authlogic_ext_config[:ignore_two_factor_auth_redirection_when_session] || []).any? do |condition|
+            two_factor_auth_redirection_session_condition_met?(c.session, condition)
+          end
+          return false if ignored_by_session
+
+          true
+        end
+
+        def two_factor_auth_redirection_session_condition_met?(session, condition)
+          case condition[:operator]
+          when :equals
+            session[condition[:key]] == condition[:value]
+          when :exists
+            session.key?(condition[:key])
+          when :not_exists
+            !session.key?(condition[:key])
           end
         end
 
