@@ -101,6 +101,12 @@ module Authlogic
           Authlogic::Session::Base.controller.cookies.delete 'two_factor_auth_credentials', :domain => Authlogic::Session::Base.controller.cookie_domain
         end
 
+        # Initialize a new record's two_factor_auth_method to nil instead of
+        # relying on the database's default value for the column.
+        def set_two_factor_auth_method_to_nil_for_new_record
+          set_two_factor_auth_method(nil)
+        end
+
         # --------------------------------------------------
         # Callback Conditional Instance Methods
         # --------------------------------------------------
@@ -117,6 +123,33 @@ module Authlogic
           return false unless acts_as_authentic_ext_config.two_factor_auth_required?
 
           get_two_factor_auth_enabled_changes == [true, false]
+        end
+
+        # See if the value of the two_factor_auth_method column has changed
+        # to nil. This does not consider it "changed" if it was already nil
+        # and remains nil.
+        def two_factor_auth_method_has_changed_to_nil?
+          changes = get_two_factor_auth_method_changes
+
+          changes.present? && changes.last.nil?
+        end
+
+        # See if a nil two_factor_auth_method is acceptable given the
+        # config options and whether this is a new or pre-existing record.
+        # A new record is allowed a nil value only via
+        # allow_new_records_auth_method_nil. A pre-existing record is
+        # allowed to keep an already-nil value via
+        # allow_pre_existing_auth_method_nil, but is never allowed to
+        # change an already-set, non-nil value to nil.
+        def two_factor_auth_method_nil_is_allowed?
+          return false unless get_two_factor_auth_method.nil?
+
+          if new_record?
+            acts_as_authentic_ext_config.allow_new_records_auth_method_nil?
+          else
+            acts_as_authentic_ext_config.allow_pre_existing_auth_method_nil? &&
+              !two_factor_auth_method_has_changed_to_nil?
+          end
         end
 
         # --------------------------------------------------
@@ -271,8 +304,13 @@ module Authlogic
             @acts_as_authentic_ext_config = config
 
             if config.two_factor_auth_method_attr_name
+              if config.new_records_auth_method_set_to_nil?
+                after_initialize :set_two_factor_auth_method_to_nil_for_new_record, if: :new_record?
+              end
+
               validates config.two_factor_auth_method_attr_name,
-                        inclusion: { in: %w[authenticator email] }
+                        inclusion: { in: %w[authenticator email] },
+                        unless: :two_factor_auth_method_nil_is_allowed?
             end
           end
 

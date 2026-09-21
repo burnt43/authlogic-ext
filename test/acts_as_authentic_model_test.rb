@@ -1203,6 +1203,168 @@ module Authlogic
         end
         # }}}
 
+        # {{{ test_two_factor_auth_method_allow_new_records_auth_method_nil
+        def test_two_factor_auth_method_allow_new_records_auth_method_nil
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+            end
+          end
+
+          base_attrs = {
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          }
+
+          # --------------------------------------------------
+          # false (default): a new record cannot be saved with a nil method.
+          # --------------------------------------------------
+          new_user = user_class.new(base_attrs.merge(two_factor_auth_method: nil))
+          refute(new_user.save)
+          assert(new_user.errors.key?(:two_factor_auth_method))
+
+          # --------------------------------------------------
+          # true: a new record can be saved with a nil method.
+          # --------------------------------------------------
+          user_class.acts_as_authentic_ext_config.with_temporary_options(allow_new_records_auth_method_nil: true) do
+            new_user = user_class.new(base_attrs.merge(username: 'user02', two_factor_auth_method: nil))
+            assert(new_user.save)
+            assert_nil(new_user.reload.two_factor_auth_method)
+          end
+        end
+        # }}}
+
+        # {{{ test_two_factor_auth_method_allow_pre_existing_auth_method_nil
+        def test_two_factor_auth_method_allow_pre_existing_auth_method_nil
+          user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+            end
+          end
+
+          base_attrs = {
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          }
+
+          # A pre-existing record's nil method is forced in directly
+          # (bypassing validations), simulating legacy data that predates
+          # this attribute (the column has a non-nil DB default).
+          pre_existing_user = user_class.new(base_attrs)
+          assert(pre_existing_user.save)
+          pre_existing_user.update_columns(two_factor_auth_method: nil)
+          pre_existing_user.reload
+
+          # --------------------------------------------------
+          # false (default): a pre-existing record cannot be saved while
+          # its method is nil, even if the method itself is unchanged.
+          # --------------------------------------------------
+          pre_existing_user.username = 'user01_renamed_a'
+          refute(pre_existing_user.save)
+          assert(pre_existing_user.errors.key?(:two_factor_auth_method))
+
+          # --------------------------------------------------
+          # true: a pre-existing record whose method is already nil can be
+          # updated successfully as long as the method itself stays nil,
+          # but an already-set, non-nil method still cannot be changed to
+          # nil.
+          # --------------------------------------------------
+          user_class.acts_as_authentic_ext_config.with_temporary_options(allow_pre_existing_auth_method_nil: true) do
+            pre_existing_user.username = 'user01_renamed_b'
+            assert(pre_existing_user.save)
+            assert_nil(pre_existing_user.reload.two_factor_auth_method)
+
+            set_method_user = user_class.new(base_attrs.merge(username: 'user02', two_factor_auth_method: 'authenticator'))
+            assert(set_method_user.save)
+
+            set_method_user.two_factor_auth_method = nil
+            refute(set_method_user.save)
+            assert(set_method_user.errors.key?(:two_factor_auth_method))
+          end
+        end
+        # }}}
+
+        # {{{ test_two_factor_auth_method_new_records_auth_method_set_to_nil
+        def test_two_factor_auth_method_new_records_auth_method_set_to_nil
+          base_attrs = {
+            username: 'user01',
+            password: 'some*password',
+            password_confirmation: 'some*password',
+            two_factor_auth_enabled: true
+          }
+
+          # --------------------------------------------------
+          # false (default): a new record relies on the DB default value.
+          #
+          # NOTE: This option registers an after_initialize callback at
+          # class-definition time, so (unlike the other two options) it
+          # can't be toggled on an already-defined class. Each case gets
+          # its own class.
+          # --------------------------------------------------
+          default_user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+            end
+          end
+
+          assert_equal('authenticator', default_user_class.new(base_attrs).two_factor_auth_method)
+
+          # --------------------------------------------------
+          # true: a new record's method is initialized to nil instead of
+          # relying on the DB default, and (paired here with
+          # allow_new_records_auth_method_nil) can be saved that way.
+          # --------------------------------------------------
+          nil_default_user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
+            acts_as_authentic_ext do |config|
+              config.two_factor_auth = true
+              config.two_factor_auth_otp_class = ROTP::TOTP
+              config.two_factor_auth_otp_code_method = :now
+              config.two_factor_auth_uri_method = :provisioning_uri
+              config.two_factor_auth_uri_input_method = :username
+              config.two_factor_auth_uri_qr_code_class = RQRCode::QRCode
+              config.two_factor_auth_method_attr_name = :two_factor_auth_method
+              config.two_factor_auth_email_code_attr_name = :two_factor_auth_email_code
+              config.two_factor_auth_email_code_sent_at_attr_name = :two_factor_auth_email_code_sent_at
+              config.new_records_auth_method_set_to_nil = true
+              config.allow_new_records_auth_method_nil = true
+            end
+          end
+
+          nil_default_user = nil_default_user_class.new(base_attrs)
+          assert_nil(nil_default_user.two_factor_auth_method)
+          assert(nil_default_user.save)
+          assert_nil(nil_default_user.reload.two_factor_auth_method)
+        end
+        # }}}
+
         # {{{ test_two_factor_auth_required_for_all
         def test_two_factor_auth_required_for_all
           user_class = Authlogic::Ext::Testing.generate_acts_as_authentic_class('Authlogic::Ext::Testing::User') do
